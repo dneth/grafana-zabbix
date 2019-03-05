@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  
+  <link rel="shortcut icon" href="../../img/favicon.ico">
+  <title>Alerting - Grafana-Zabbix Documentation</title>
+  <link href='https://fonts.googleapis.com/css?family=Lato:400,700|Roboto+Slab:400,700|Inconsolata:400,700' rel='stylesheet' type='text/css'>
+
+  <link rel="stylesheet" href="../../css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../css/theme_extra.css" type="text/css" />
+  <link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css">
+  <link href="../../css/custom.css" rel="stylesheet">
+  
+  <script>
+    // Current page data
+    var mkdocs_page_name = "Alerting";
+    var mkdocs_page_input_path = "reference/alerting.md";
+    var mkdocs_page_url = "/grafana-zabbix/reference/alerting/";
+  </script>
+  
+  <script src="../../js/jquery-2.1.1.min.js" defer></script>
+  <script src="../../js/modernizr-2.8.3.min.js" defer></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/languages/yaml.min.js"></script>
+  <script src="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/languages/sql.min.js"></script>
+  <script>hljs.initHighlightingOnLoad();</script> 
+  
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+      <div class="wy-side-nav-search">
+        <a href="../.." class="icon icon-home"> Grafana-Zabbix Documentation</a>
+        <div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+	<ul class="current">
+	  
+          
+            <li class="toctree-l1">
+		
+    <span class="caption-text">Project</span>
+    <ul class="subnav">
+                <li class="">
+                    
+    <a class="" href="../..">About Grafana-Zabbix</a>
+                </li>
+                <li class="">
+                    
+    <a class="" href="../../features/">Feature Highlights</a>
+                </li>
+    </ul>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <span class="caption-text">Installation</span>
+    <ul class="subnav">
+                <li class="">
+                    
+    <a class="" href="../../installation/">Installation</a>
+                </li>
+                <li class="">
+                    
+    <a class="" href="../../installation/run_from_master/">Building from sources</a>
+                </li>
+                <li class="">
+                    
+    <a class="" href="../../installation/upgrade/">Upgrade</a>
+                </li>
+    </ul>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <span class="caption-text">Configuration</span>
+    <ul class="subnav">
+                <li class="">
+                    
+    <a class="" href="../../configuration/">Configuration</a>
+                </li>
+                <li class="">
+                    
+    <a class="" href="../../configuration/direct_db_datasource/">Direct DB Connection Configuration</a>
+                </li>
+                <li class="">
+                    
+    <a class="" href="../../configuration/provisioning/">Provisioning</a>
+                </li>
+                <li class="">
+                    
+    <a class="" href="../../configuration/troubleshooting/">Troubleshooting</a>
+                </li>
+    </ul>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <span class="caption-text">User Guides</span>
+    <ul class="subnav">
+                <li class="">
+                    
+    <a class="" href="../../guides/gettingstarted/">Getting Started</a>
+                </li>
+                <li class="">
+                    
+    <a class="" href="../../guides/templating/">Templating</a>
+                </li>
+    </ul>
+	    </li>
+          
+            <li class="toctree-l1">
+		
+    <span class="caption-text">Reference</span>
+    <ul class="subnav">
+                <li class="">
+                    
+    <a class="" href="../datasource-zabbix/">Zabbix Datasource</a>
+                </li>
+                <li class="">
+                    
+    <a class="" href="../panel-triggers/">Triggers Panel</a>
+                </li>
+                <li class="">
+                    
+    <a class="" href="../functions/">Functions</a>
+                </li>
+                <li class=" current">
+                    
+    <a class="current" href="./">Alerting</a>
+    <ul class="subnav">
+            
+    <li class="toctree-l3"><a href="#alerting">Alerting</a></li>
+    
+
+    </ul>
+                </li>
+                <li class="">
+                    
+    <a class="" href="../direct-db-connection/">Direct DB Connection</a>
+                </li>
+    </ul>
+	    </li>
+          
+        </ul>
+      </div>
+      &nbsp;
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
+        <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+        <a href="../..">Grafana-Zabbix Documentation</a>
+      </nav>
+
+      
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../..">Docs</a> &raquo;</li>
+    
+      
+        
+          <li>Reference &raquo;</li>
+        
+      
+    
+    <li>Alerting</li>
+    <li class="wy-breadcrumbs-aside">
+      
+        <a href="https://github.com/alexanderzobnin/grafana-zabbix/blob/docs/docs/sources/reference/alerting.md"
+          class="icon icon-github"> Edit on GitHub</a>
+      
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main">
+            <div class="section">
+              
+                <h1 id="alerting">Alerting</h1>
+<p>Since version 4.0 <a href="https://grafana.com/">Grafana</a> has its own alerting engine.</p>
+<blockquote>
+<p>Alerting in Grafana allows you to attach rules to your dashboard panels. When you save the dashboard Grafana will extract the alert rules into a separate alert rule storage and schedule them for evaluation.</p>
+<p>In the alert tab of the graph panel you can configure how often the alert rule should be evaluated and the conditions that need to be met for the alert to change state and trigger its notifications.</p>
+</blockquote>
+<p>Read more about alerting feature in <a href="http://docs.grafana.org/alerting/rules/">Grafana docs</a>.</p>
+<p>On the other hand, Zabbix has its own alerting system with triggers, events and notifications. And the best way is to 
+combine benefits of these systems into Zabbix plugin for Grafana. So how it works you'll ask? Grafana alerting feature 
+consists of two main parts:</p>
+<ul>
+<li><strong>Alerting execution engine</strong><br />
+    The alert rules are evaluated in the Grafana backend in a scheduler and query execution engine that is part of core 
+    Grafana. Only some data soures are supported right now. They include Graphite, Prometheus, InfluxDB and OpenTSDB.</li>
+<li><strong>Alerting visualisations</strong><br />
+    Alerts highlight panels with problems and it can easily be found on the dashboard.</li>
+</ul>
+<p>So Zabbix plugin doesn't use execution engine and doesn't allow to configure rules in Grafana. But it fetches information
+about triggers related to metrics at particular panel and fires alert state for these panels.</p>
+<p><img alt="Alerting" src="../../img/reference-alerting_panels.png" /></p>
+<p>So there are three possible cases for each panel:</p>
+<ol>
+<li>Panel contains Zabbix items which are used in triggers:<ul>
+<li>At least one of these related triggers is in the PROBLEM state.<br />
+  In this case panel will be highlighted with the red glow and broken heart icon.</li>
+<li>All triggers are in the OK state.<br />
+  Panel will be displayed with green heart icon without highlighting.</li>
+</ul>
+</li>
+<li>There aren't triggers related to items on panel.<br />
+     Panel will be displayed without any changes.</li>
+</ol>
+<p>Note, that only triggers with severity above than configured at Data Source config page will be used for panel state
+calculation.</p>
+<p>Also plugin can extract thresholds from trigger expression and set it on graph. You can enable this feature 
+in Data Source config. Thresholds are parts of panel JSON data, so it will be stored in backend if you save dashboard, 
+but plugin marks this thresholds with special tag, so it will be changed or deleted if you change it in Zabbix.</p>
+              
+            </div>
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="../direct-db-connection/" class="btn btn-neutral float-right" title="Direct DB Connection">Next <span class="icon icon-circle-arrow-right"></span></a>
+      
+      
+        <a href="../functions/" class="btn btn-neutral" title="Functions"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+    
+      <p>Copyright &copy; 2015-2019, Alexander Zobnin</p>
+    
+  </div>
+
+  Built with <a href="http://www.mkdocs.org">MkDocs</a> using a <a href="https://github.com/snide/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+      
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" style="cursor: pointer">
+    <span class="rst-current-version" data-toggle="rst-current-version">
+      
+          <a href="https://github.com/alexanderzobnin/grafana-zabbix/" class="fa fa-github" style="float: left; color: #fcfcfc"> GitHub</a>
+      
+      
+        <span><a href="../functions/" style="color: #fcfcfc;">&laquo; Previous</a></span>
+      
+      
+        <span style="margin-left: 15px"><a href="../direct-db-connection/" style="color: #fcfcfc">Next &raquo;</a></span>
+      
+    </span>
+</div>
+    <script>var base_url = '../..';</script>
+    <script src="../../js/theme.js" defer></script>
+      <script src="../../search/main.js" defer></script>
+
+</body>
+</html>
