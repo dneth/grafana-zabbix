@@ -64,7 +64,7 @@ func (ds *ZabbixDatasource) ZabbixAPIQuery(ctx context.Context, tsdbReq *datasou
 		for _, query := range tsdbReq.Queries {
 			json, err := simplejson.NewJson([]byte(query.ModelJson))
 			apiMethod := json.GetPath("target", "method").MustString()
-			apiParams := json.GetPath("target", "params")
+			apiParams := json.GetPath("target", "params").MustMap()
 
 			if err != nil {
 				return nil, err
@@ -81,10 +81,11 @@ func (ds *ZabbixDatasource) ZabbixAPIQuery(ctx context.Context, tsdbReq *datasou
 
 		jsonQuery := jsonQueries[0].Get("target")
 		apiMethod := jsonQuery.Get("method").MustString()
-		apiParams := jsonQuery.Get("params")
+		apiParams := jsonQuery.Get("params").MustMap()
 
-		result, err := ds.ZabbixRequest(ctx, dsInfo, apiMethod, apiParams)
-		ds.queryCache.Set(HashString(tsdbReq.String()), result)
+		response, err := ds.ZabbixRequest(ctx, dsInfo, apiMethod, apiParams)
+		ds.queryCache.Set(HashString(tsdbReq.String()), response)
+		result = response
 		if err != nil {
 			ds.logger.Debug("ZabbixAPIQuery", "error", err)
 			return nil, errors.New("ZabbixAPIQuery is not implemented yet")
@@ -95,6 +96,41 @@ func (ds *ZabbixDatasource) ZabbixAPIQuery(ctx context.Context, tsdbReq *datasou
 	ds.logger.Debug("ZabbixAPIQuery", "result", string(resultByte))
 
 	return ds.BuildResponse(result.(*simplejson.Json))
+}
+
+// TestConnection checks authentication and version of the Zabbix API and returns that info
+func (ds *ZabbixDatasource) TestConnection(ctx context.Context, tsdbReq *datasource.DatasourceRequest) (*datasource.DatasourceResponse, error) {
+	dsInfo := tsdbReq.GetDatasource()
+
+	auth, err := ds.loginWithDs(ctx, dsInfo)
+	if err != nil {
+		return nil, err
+	}
+	ds.authToken = auth
+
+	response, err := ds.zabbixAPIRequest(ctx, dsInfo.GetUrl(), "apiinfo.version", map[string]interface{}{}, "")
+	if err != nil {
+		ds.logger.Debug("TestConnection", "error", err)
+		return nil, err
+	}
+
+	resultByte, _ := response.MarshalJSON()
+	ds.logger.Debug("TestConnection", "result", string(resultByte))
+
+	testResponse := connectionTestResponse{
+		ZabbixVersion: response.MustString(),
+	}
+	responseJSON, err := json.Marshal(testResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	responseSimpleJSON, err := simplejson.NewJson(responseJSON)
+	if err != nil {
+		return nil, err
+	}
+
+	return ds.BuildResponse(responseSimpleJSON)
 }
 
 // BuildResponse transforms a Zabbix API response to a DatasourceResponse
@@ -115,7 +151,7 @@ func (ds *ZabbixDatasource) BuildResponse(result *simplejson.Json) (*datasource.
 }
 
 // ZabbixRequest checks authentication and makes a request to the Zabbix API
-func (ds *ZabbixDatasource) ZabbixRequest(ctx context.Context, dsInfo *datasource.DatasourceInfo, method string, params *simplejson.Json) (*simplejson.Json, error) {
+func (ds *ZabbixDatasource) ZabbixRequest(ctx context.Context, dsInfo *datasource.DatasourceInfo, method string, params map[string]interface{}) (*simplejson.Json, error) {
 	zabbixURL := dsInfo.GetUrl()
 
 	// Authenticate first
@@ -166,12 +202,7 @@ func (ds *ZabbixDatasource) login(ctx context.Context, apiURL string, username s
 		"user":     username,
 		"password": password,
 	}
-	paramsJSON, err := json.Marshal(params)
-	if err != nil {
-		return "", err
-	}
-	data, _ := simplejson.NewJson(paramsJSON)
-	auth, err := ds.zabbixAPIRequest(ctx, apiURL, "user.login", data, "")
+	auth, err := ds.zabbixAPIRequest(ctx, apiURL, "user.login", params, "")
 	if err != nil {
 		return "", err
 	}
@@ -179,7 +210,7 @@ func (ds *ZabbixDatasource) login(ctx context.Context, apiURL string, username s
 	return auth.MustString(), nil
 }
 
-func (ds *ZabbixDatasource) zabbixAPIRequest(ctx context.Context, apiURL string, method string, params *simplejson.Json, auth string) (*simplejson.Json, error) {
+func (ds *ZabbixDatasource) zabbixAPIRequest(ctx context.Context, apiURL string, method string, params map[string]interface{}, auth string) (*simplejson.Json, error) {
 	zabbixURL, err := url.Parse(apiURL)
 
 	// TODO: inject auth token (obtain from 'user.login' first)
