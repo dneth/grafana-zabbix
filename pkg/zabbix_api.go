@@ -317,7 +317,7 @@ func (ds *ZabbixDatasource) queryNumericItems(ctx context.Context, tsdbReq *data
 		return nil, err
 	}
 
-	return ds.BuildResponse(response)
+	return BuildResponse(response)
 }
 
 func (ds *ZabbixDatasource) getItems(ctx context.Context, dsInfo *datasource.DatasourceInfo, groupFilter string, hostFilter string, appFilter string, itemFilter string, itemType string) ([]*simplejson.Json, error) {
@@ -448,7 +448,7 @@ func (ds *ZabbixDatasource) getAllItems(ctx context.Context, dsInfo *datasource.
 		params.Set("applicationids", appids)
 	}
 
-	return ds.ZabbixRequest(ctx, dsInfo, "item.get", params)
+	return ds.ZabbixRequest(ctx, dsInfo, "item.get", params.MustMap())
 }
 
 func (ds *ZabbixDatasource) getAllApps(ctx context.Context, dsInfo *datasource.DatasourceInfo, hostids []string) (*simplejson.Json, error) {
@@ -459,7 +459,7 @@ func (ds *ZabbixDatasource) getAllApps(ctx context.Context, dsInfo *datasource.D
 		params.Set("hostids", hostids)
 	}
 
-	return ds.ZabbixRequest(ctx, dsInfo, "application.get", params)
+	return ds.ZabbixRequest(ctx, dsInfo, "application.get", params.MustMap())
 }
 
 func (ds *ZabbixDatasource) getAllHosts(ctx context.Context, dsInfo *datasource.DatasourceInfo, groupids []string) (*simplejson.Json, error) {
@@ -470,7 +470,7 @@ func (ds *ZabbixDatasource) getAllHosts(ctx context.Context, dsInfo *datasource.
 		params.Set("groupids", groupids)
 	}
 
-	return ds.ZabbixRequest(ctx, dsInfo, "host.get", params)
+	return ds.ZabbixRequest(ctx, dsInfo, "host.get", params.MustMap())
 }
 
 func (ds *ZabbixDatasource) getAllGroups(ctx context.Context, dsInfo *datasource.DatasourceInfo) (*simplejson.Json, error) {
@@ -478,7 +478,7 @@ func (ds *ZabbixDatasource) getAllGroups(ctx context.Context, dsInfo *datasource
 	if err != nil {
 		return nil, err
 	}
-	return ds.ZabbixRequest(ctx, dsInfo, "hostgroup.get", params)
+	return ds.ZabbixRequest(ctx, dsInfo, "hostgroup.get", params.MustMap())
 }
 func (ds *ZabbixDatasource) queryNumericDataForItems(ctx context.Context, tsdbReq *datasource.DatasourceRequest, items []*simplejson.Json, jsonQueries []*simplejson.Json, useTrend bool) (*simplejson.Json, error) {
 	valueType := ds.getTrendValueType(jsonQueries)
@@ -558,9 +558,9 @@ func (ds *ZabbixDatasource) getHistotyOrTrend(ctx context.Context, tsdbReq *data
 		}
 
 		if useTrend {
-			response, err = ds.ZabbixRequest(ctx, tsdbReq.GetDatasource(), "trend.get", params)
+			response, err = ds.ZabbixRequest(ctx, tsdbReq.GetDatasource(), "trend.get", params.MustMap())
 		} else {
-			response, err = ds.ZabbixRequest(ctx, tsdbReq.GetDatasource(), "history.get", params)
+			response, err = ds.ZabbixRequest(ctx, tsdbReq.GetDatasource(), "history.get", params.MustMap())
 		}
 
 		if err != nil {
