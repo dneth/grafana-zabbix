@@ -1,12 +1,12 @@
 import _ from 'lodash';
-import { ZabbixMetricsQuery } from './types';
+import { LegacyZabbixMetricsQuery, ZabbixMetricsQuery, ZabbixJsonData } from './types';
 
 /**
  * Query format migration.
  * This module can detect query format version and make migration.
  */
 
-export function isGrafana2target(target) {
+export function isGrafana2target(target: LegacyZabbixMetricsQuery) {
   if (!target.mode || target.mode === 0 || target.mode === 2) {
     if ((target.hostFilter || target.itemFilter || target.downsampleFunction ||
         (target.host && target.host.host)) &&
@@ -20,7 +20,7 @@ export function isGrafana2target(target) {
   }
 }
 
-export function migrateFrom2To3version(target: ZabbixMetricsQuery) {
+export function migrateFrom2To3version(target: LegacyZabbixMetricsQuery) {
   target.group.filter = target.group.name === "*" ? "/.*/" : target.group.name;
   target.host.filter = target.host.name === "*" ? convertToRegex(target.hostFilter) : target.host.name;
   target.application.filter = target.application.name === "*" ? "" : target.application.name;
@@ -28,7 +28,7 @@ export function migrateFrom2To3version(target: ZabbixMetricsQuery) {
   return target;
 }
 
-export function migrate(target) {
+export function migrate(target: LegacyZabbixMetricsQuery): ZabbixMetricsQuery {
   target.resultFormat = target.resultFormat || 'time_series';
   target = fixTargetGroup(target);
   if (isGrafana2target(target)) {
@@ -38,14 +38,14 @@ export function migrate(target) {
   return target;
 }
 
-function fixTargetGroup(target) {
+function fixTargetGroup(target: LegacyZabbixMetricsQuery) {
   if (target.group && Array.isArray(target.group)) {
     target.group = { 'filter': "" };
   }
   return target;
 }
 
-function convertToRegex(str) {
+function convertToRegex(str: string) {
   if (str) {
     return '/' + str + '/';
   } else {
@@ -53,7 +53,7 @@ function convertToRegex(str) {
   }
 }
 
-function migratePercentileAgg(target) {
+function migratePercentileAgg(target: LegacyZabbixMetricsQuery) {
   if (target.functions) {
     for (const f of target.functions) {
       if (f.def && f.def.name === 'percentil') {
@@ -64,7 +64,7 @@ function migratePercentileAgg(target) {
 }
 
 export const DS_CONFIG_SCHEMA = 2;
-export function migrateDSConfig(jsonData) {
+export function migrateDSConfig(jsonData: ZabbixJsonData) {
   if (!jsonData) {
     jsonData = {};
   }
@@ -86,7 +86,7 @@ export function migrateDSConfig(jsonData) {
   return jsonData;
 }
 
-function shouldMigrateDSConfig(jsonData): boolean {
+function shouldMigrateDSConfig(jsonData: ZabbixJsonData): boolean {
   if (jsonData.dbConnection && !_.isEmpty(jsonData.dbConnection)) {
     return true;
   }
