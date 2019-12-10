@@ -1,5 +1,6 @@
 import _ from 'lodash';
-import { LegacyZabbixMetricsQuery, ZabbixMetricsQuery, ZabbixJsonData } from './types';
+import { LegacyZabbixMetricsQuery, ZabbixMetricsQuery, ZabbixJsonData, ZabbixJsonDataV1 } from './types';
+import * as constants from './constants';
 
 /**
  * Query format migration.
@@ -64,29 +65,26 @@ function migratePercentileAgg(target: LegacyZabbixMetricsQuery) {
 }
 
 export const DS_CONFIG_SCHEMA = 2;
-export function migrateDSConfig(jsonData: ZabbixJsonData) {
-  if (!jsonData) {
-    jsonData = {};
-  }
-
-  if (!shouldMigrateDSConfig(jsonData)) {
+export function migrateDSConfig(jsonData: ZabbixJsonDataV1): ZabbixJsonData {
+  if (jsonData && !shouldMigrateDSConfig(jsonData)) {
     return jsonData;
   }
+
+  let newJsonData: ZabbixJsonData = jsonData || constants.DEFAULT_CONFIG;
 
   const oldVersion = jsonData.schema || 1;
   jsonData.schema = DS_CONFIG_SCHEMA;
 
   if (oldVersion < 2) {
     const dbConnectionOptions = jsonData.dbConnection || {};
-    jsonData.dbConnectionEnable = dbConnectionOptions.enable || false;
-    jsonData.dbConnectionDatasourceId = dbConnectionOptions.datasourceId || null;
-    delete jsonData.dbConnection;
+    newJsonData.dbConnectionEnable = dbConnectionOptions.enable || false;
+    newJsonData.dbConnectionDatasourceId = dbConnectionOptions.datasourceId || null;
   }
 
-  return jsonData;
+  return newJsonData;
 }
 
-function shouldMigrateDSConfig(jsonData: ZabbixJsonData): boolean {
+function shouldMigrateDSConfig(jsonData: ZabbixJsonDataV1): boolean {
   if (jsonData.dbConnection && !_.isEmpty(jsonData.dbConnection)) {
     return true;
   }

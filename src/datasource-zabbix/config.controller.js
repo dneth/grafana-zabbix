@@ -1,5 +1,6 @@
 import _ from 'lodash';
 import { migrateDSConfig } from './migrations';
+import * as constants from './constants';
 
 const SUPPORTED_SQL_DS = ['mysql', 'postgres', 'influxdb'];
 
@@ -9,17 +10,6 @@ const zabbixVersions = [
   { name: '4.x', value: 4 },
 ];
 
-const defaultConfig = {
-  trends: false,
-  dbConnectionEnable: false,
-  dbConnectionDatasourceId: null,
-  alerting: false,
-  addThresholds: false,
-  alertingMinSeverity: 3,
-  disableReadOnlyUsersAck: false,
-  zabbixVersion: 3,
-};
-
 export class ZabbixDSConfigController {
 
   /** @ngInject */
@@ -27,7 +17,7 @@ export class ZabbixDSConfigController {
     this.datasourceSrv = datasourceSrv;
 
     this.current.jsonData = migrateDSConfig(this.current.jsonData);
-    _.defaults(this.current.jsonData, defaultConfig);
+    _.defaults(this.current.jsonData, constants.DEFAULT_CONFIG);
 
     this.dbConnectionDatasourceId = this.current.jsonData.dbConnectionDatasourceId;
     this.dbDataSources = this.getSupportedDBDataSources();

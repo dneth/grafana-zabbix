@@ -17,11 +17,26 @@ export interface ZabbixJsonData extends DataSourceJsonData {
   alerting: boolean;
   alertingMinSeverity: number;
   addThresholds: boolean;
-  dbConnection?: boolean;
   dbConnectionEnable?: boolean;
   dbConnectionDatasourceId?: any;
   dbConnectionRetentionPolicy?: string;
   dbConnectionDatasourceName?: string;
+  schema?: any;
+  trends?: boolean;
+  trendsRange?: string;
+  trendsFrom?: string;
+  disableReadOnlyUsersAck: boolean;
+  username?: string;
+  password?: string;
+  cacheTTL: string;
+  zabbixVersion: number;
+}
+
+export interface ZabbixJsonDataV1 extends DataSourceJsonData {
+  alerting: boolean;
+  alertingMinSeverity: number;
+  addThresholds: boolean;
+  dbConnection?: { enable?: boolean; datasourceId?: number };
   schema?: any;
   trends?: boolean;
   trendsRange?: string;

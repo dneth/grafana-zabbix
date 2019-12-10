@@ -37,3 +37,18 @@ export const TRIGGER_SEVERITY = [
 
 /** Minimum interval for SLA over time (1 hour) */
 export const MIN_SLA_INTERVAL = 3600;
+
+/**
+ * @type {import("./types").ZabbixJsonData}
+ */
+export const DEFAULT_CONFIG = {
+  cacheTTL: "1h",
+  dbConnectionEnable: false,
+  dbConnectionDatasourceId: null,
+  trends: false,
+  alerting: false,
+  addThresholds: false,
+  alertingMinSeverity: 3,
+  disableReadOnlyUsersAck: false,
+  zabbixVersion: 3,
+};
