@@ -18,14 +18,13 @@ func TestZabbixBackend_getCachedDatasource(t *testing.T) {
 	}
 	basicDatasourceInfoHash := HashDatasourceInfo(basicDatasourceInfo)
 
-	modifiedDatasource := NewZabbixDatasource()
-	modifiedDatasource.authToken = "AB404F1234"
-
 	altDatasourceInfo := &datasource.DatasourceInfo{
 		Id:   2,
 		Name: "AnotherDatasource",
 	}
 	altDatasourceInfoHash := HashDatasourceInfo(altDatasourceInfo)
+
+	modifiedDatasource := NewZabbixDatasourceWithHash("UNIQUE_HASH")
 
 	tests := []struct {
 		name    string
@@ -38,7 +37,7 @@ func TestZabbixBackend_getCachedDatasource(t *testing.T) {
 			request: &datasource.DatasourceRequest{
 				Datasource: basicDatasourceInfo,
 			},
-			want: NewZabbixDatasource(),
+			want: NewZabbixDatasourceWithHash(HashDatasourceInfo(basicDatasourceInfo)),
 		},
 		{
 			name: "Uncached Datasource (cache miss)",
@@ -48,7 +47,7 @@ func TestZabbixBackend_getCachedDatasource(t *testing.T) {
 			request: &datasource.DatasourceRequest{
 				Datasource: altDatasourceInfo,
 			},
-			want: NewZabbixDatasource(),
+			want: NewZabbixDatasourceWithHash(HashDatasourceInfo(altDatasourceInfo)),
 		},
 		{
 			name: "Cached Datasource",
@@ -77,7 +76,7 @@ func TestZabbixBackend_getCachedDatasource(t *testing.T) {
 			got := b.getCachedDatasource(tt.request)
 
 			// Only checking the authToken, being the easiest value to, and guarantee equality for
-			assert.Equal(t, tt.want.authToken, got.authToken)
+			assert.Equal(t, tt.want.hash, got.hash)
 		})
 	}
 }
