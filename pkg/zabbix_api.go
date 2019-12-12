@@ -63,14 +63,15 @@ func (ds *ZabbixDatasource) ZabbixAPIQuery(ctx context.Context, tsdbReq *datasou
 		jsonQueries := make([]*simplejson.Json, 0)
 		for _, query := range tsdbReq.Queries {
 			json, err := simplejson.NewJson([]byte(query.ModelJson))
-			apiMethod := json.GetPath("target", "method").MustString()
-			apiParams := json.GetPath("target", "params").MustMap()
 
 			if err != nil {
 				return nil, err
-			}
+			} else {
+				apiMethod := json.GetPath("target", "method").MustString()
+				apiParams := json.GetPath("target", "params").MustMap()
+				ds.logger.Debug("ZabbixAPIQuery", "method", apiMethod, "params", apiParams)
 
-			ds.logger.Debug("ZabbixAPIQuery", "method", apiMethod, "params", apiParams)
+			}
 
 			jsonQueries = append(jsonQueries, json)
 		}
@@ -85,7 +86,7 @@ func (ds *ZabbixDatasource) ZabbixAPIQuery(ctx context.Context, tsdbReq *datasou
 
 		var err error
 		result, err = ds.ZabbixRequest(ctx, dsInfo, apiMethod, apiParams)
-		queryCache.Set(Hash(tsdbReq.String()), result)
+		ds.queryCache.Set(HashString(tsdbReq.String()), result)
 		if err != nil {
 			ds.logger.Debug("ZabbixAPIQuery", "error", err)
 			return nil, errors.New("ZabbixAPIQuery is not implemented yet")
@@ -104,14 +105,14 @@ func (ds *ZabbixDatasource) TestConnection(ctx context.Context, tsdbReq *datasou
 
 	auth, err := ds.loginWithDs(ctx, dsInfo)
 	if err != nil {
-		return BuildErrorResponse(fmt.Errorf("Authentication failed: %w", err)), nil
+		return BuildErrorResponse(fmt.Errorf("Authentication failed: %s", err)), nil
 	}
 	ds.authToken = auth
 
 	response, err := ds.zabbixAPIRequest(ctx, dsInfo.GetUrl(), "apiinfo.version", map[string]interface{}{}, "")
 	if err != nil {
 		ds.logger.Debug("TestConnection", "error", err)
-		return BuildErrorResponse(fmt.Errorf("Version check failed: %w", err)), nil
+		return BuildErrorResponse(fmt.Errorf("Version check failed: %s", err)), nil
 	}
 
 	resultByte, _ := response.MarshalJSON()
@@ -124,25 +125,25 @@ func (ds *ZabbixDatasource) TestConnection(ctx context.Context, tsdbReq *datasou
 	return BuildResponse(testResponse)
 }
 
-func (ds *ZabbixDatasource) ZabbixRequest(ctx context.Context, dsInfo *datasource.DatasourceInfo, method string, params *simplejson.Json) (*simplejson.Json, error) {
+func (ds *ZabbixDatasource) ZabbixRequest(ctx context.Context, dsInfo *datasource.DatasourceInfo, method string, params map[string]interface{}) (*simplejson.Json, error) {
 	zabbixURL := dsInfo.GetUrl()
 
 	var result *simplejson.Json
 	var err error
 
 	for attempt := 0; attempt <= 3; attempt++ {
-		if zabbixAuth == "" {
+		if ds.authToken == "" {
 			// Authenticate
-			zabbixAuth, err = ds.loginWithDs(ctx, dsInfo)
+			ds.authToken, err = ds.loginWithDs(ctx, dsInfo)
 			if err != nil {
 				return nil, err
 			}
 		}
-		result, err = ds.zabbixAPIRequest(ctx, zabbixURL, method, params, zabbixAuth)
+		result, err = ds.zabbixAPIRequest(ctx, zabbixURL, method, params, ds.authToken)
 		if err == nil || (err != nil && !isNotAuthorized(err.Error())) {
 			break
 		} else {
-			zabbixAuth = ""
+			ds.authToken = ""
 		}
 	}
 	return result, err
