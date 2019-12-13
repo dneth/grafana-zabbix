@@ -9,14 +9,31 @@ import dataProcessor from './dataProcessor';
 import responseHandler from './responseHandler';
 import { Zabbix } from './zabbix/zabbix';
 import { ZabbixAPIError } from './zabbix/connectors/zabbix_api/zabbixAPICore';
+import {
+  DataSourceApi,
+  DataSourceInstanceSettings,
+} from '@grafana/ui';
+import { BackendSrv, DataSourceSrv } from '@grafana/runtime';
+import { ZabbixAlertingService } from './zabbixAlerting.service';
+import { ZabbixConnectionTestQuery, ZabbixConnectionInfo, TemplateSrv, TSDBResponse } from './types';
 
 const DEFAULT_ZABBIX_VERSION = 3;
 
-export class ZabbixDatasource {
+export class ZabbixDatasource extends DataSourceApi {
 
-  /** @ngInject */
+  /**
+   * @ngInject
+   * @param {DataSourceInstanceSettings} instanceSettings
+   * @param {TemplateSrv} templateSrv
+   * @param {BackendSrv} backendSrv
+   * @param {DataSourceSrv} datasourceSrv
+   * @param {ZabbixAlertingService} zabbixAlertingSrv
+   */
   constructor(instanceSettings, templateSrv, backendSrv, datasourceSrv, zabbixAlertingSrv) {
+    super(instanceSettings);
+    this.type = 'zabbix';
     this.templateSrv = templateSrv;
+    this.backendSrv = backendSrv;
     this.zabbixAlertingSrv = zabbixAlertingSrv;
 
     this.enableDebugLog = config.buildInfo.env === 'development';
@@ -25,6 +42,7 @@ export class ZabbixDatasource {
     this.replaceTemplateVars = _.partial(replaceTemplateVars, this.templateSrv);
 
     // General data source settings
+    this.datasourceId     = instanceSettings.id;
     this.name             = instanceSettings.name;
     this.url              = instanceSettings.url;
     this.basicAuth        = instanceSettings.basicAuth;
@@ -74,7 +92,7 @@ export class ZabbixDatasource {
       dbConnectionRetentionPolicy: this.dbConnectionRetentionPolicy,
     };
 
-    this.zabbix = new Zabbix(zabbixOptions, datasourceSrv, backendSrv);
+    this.zabbix = new Zabbix(zabbixOptions, datasourceSrv, backendSrv, this.datasourceId);
   }
 
   ////////////////////////
@@ -87,6 +105,9 @@ export class ZabbixDatasource {
    * @return {Object} Grafana metrics object with timeseries data for each target.
    */
   query(options) {
+    // console.log('invoking doTsdbRequest()');
+    // this.doTsdbRequest(options);
+
     // Get alerts for current panel
     if (this.alertingEnabled) {
       this.alertQuery(options).then(alert => {
@@ -167,6 +188,42 @@ export class ZabbixDatasource {
       .then(data => {
         return { data: data };
       });
+  }
+
+  doTsdbRequest(options) {
+    const tsdbRequestData = {
+      queries: options.targets.map(target => {
+        target.datasourceId = this.datasourceId;
+        target.queryType = 'zabbixAPI';
+        return target;
+      }),
+    };
+
+    if (options.range) {
+      tsdbRequestData.from = options.range.from.valueOf().toString();
+      tsdbRequestData.to = options.range.to.valueOf().toString();
+    }
+
+    return this.backendSrv.post('/api/tsdb/query', tsdbRequestData);
+  }
+
+  /**
+   * @returns {Promise<TSDBResponse>}
+   */
+  doTSDBConnectionTest() {
+    /**
+     * @type {{ queries: ZabbixConnectionTestQuery[] }}
+     */
+    const tsdbRequestData = {
+      queries: [
+        {
+          datasourceId: this.datasourceId,
+          queryType: 'connectionTest'
+        }
+      ]
+    };
+
+    return this.backendSrv.post('/api/tsdb/query', tsdbRequestData);
   }
 
   /**
@@ -362,10 +419,13 @@ export class ZabbixDatasource {
   /**
    * Test connection to Zabbix API and external history DB.
    */
-  testDatasource() {
-    return this.zabbix.testDataSource()
-    .then(result => {
-      const { zabbixVersion, dbConnectorStatus } = result;
+  async testDatasource() {
+    try {
+      const result = await this.doTSDBConnectionTest();
+      /**
+       * @type {ZabbixConnectionInfo}
+       */
+      const { zabbixVersion, dbConnectorStatus } = result.results["zabbixAPI"].meta;
       let message = `Zabbix API version: ${zabbixVersion}`;
       if (dbConnectorStatus) {
         message += `, DB connector type: ${dbConnectorStatus.dsType}`;
@@ -375,27 +435,30 @@ export class ZabbixDatasource {
         title: "Success",
         message: message
       };
-    })
-    .catch(error => {
+    }
+    catch (error) {
       if (error instanceof ZabbixAPIError) {
         return {
           status: "error",
           title: error.message,
           message: error.message
         };
-      } else if (error.data && error.data.message) {
+      }
+      else if (error.data && error.data.message) {
         return {
           status: "error",
-          title: "Connection failed",
-          message: "Connection failed: " + error.data.message
+          title: "Zabbix Client Error",
+          message: error.data.message
         };
-      } else if (typeof(error) === 'string') {
+      }
+      else if (typeof (error) === 'string') {
         return {
           status: "error",
-          title: "Connection failed",
-          message: "Connection failed: " + error
+          title: "Unknown Error",
+          message: error
         };
-      } else {
+      }
+      else {
         console.log(error);
         return {
           status: "error",
@@ -403,7 +466,7 @@ export class ZabbixDatasource {
           message: "Could not connect to given url"
         };
       }
-    });
+    }
   }
 
   /**
