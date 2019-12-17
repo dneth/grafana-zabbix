@@ -1,5 +1,7 @@
 package main
 
+import "encoding/json"
+
 type connectionTestResponse struct {
 	ZabbixVersion     string              `json:"zabbixVersion"`
 	DbConnectorStatus *dbConnectionStatus `json:"dbConnectorStatus"`
@@ -42,4 +44,17 @@ type zabbixParams struct {
 type queryRequest struct {
 	Method string       `json:"method,omitempty"`
 	Params zabbixParams `json:"params,omitempty"`
+}
+
+type zabbixResponse struct {
+	ID         int                  `json:"id,omitempty"`
+	Result     json.RawMessage      `json:"result,omitempty"`
+	Error      *zabbixResponseError `json:"error,omitempty"`
+	RPCVersion string               `json:"jsonrpc,omitempty"`
+}
+
+type zabbixResponseError struct {
+	Code    int    `json:"code,omitempty"`
+	Message string `json:"message,omitempty"`
+	Data    string `json:"data,omitempty"`
 }

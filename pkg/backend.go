@@ -95,6 +95,18 @@ func BuildResponse(responseData interface{}) (*datasource.DatasourceResponse, er
 	}, nil
 }
 
+// BuildMetricsResponse builds a response object using a given TimeSeries array
+func BuildMetricsResponse(metrics []*datasource.TimeSeries) (*datasource.DatasourceResponse, error) {
+	return &datasource.DatasourceResponse{
+		Results: []*datasource.QueryResult{
+			&datasource.QueryResult{
+				RefId:  "zabbixMetrics",
+				Series: metrics,
+			},
+		},
+	}, nil
+}
+
 // BuildErrorResponse creates a QueryResult that forwards an error to the front-end
 func BuildErrorResponse(err error) *datasource.DatasourceResponse {
 	return &datasource.DatasourceResponse{
