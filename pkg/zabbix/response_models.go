@@ -1,5 +1,24 @@
 package zabbix
 
+type Applications []Application
+type Application struct {
+	ApplicationID string   `json:"applicationid,omitempty"`
+	HostID        string   `json:"hostid,omitempty"`
+	Name          string   `json:"name,omitempty"`
+	TemplateIDs   []string `json:"templateids,omitempty"`
+}
+
+type Hosts []Host
+type Host struct {
+	Name string `json:"name,omitempty"`
+	Host string `json:"host,omitempty"`
+}
+
+type Groups []Group
+type Group struct {
+	Name string `json:"name,omitempty"`
+}
+
 type Items []Item
 type Item struct {
 	ID        string     `json:"itemid,omitempty"`

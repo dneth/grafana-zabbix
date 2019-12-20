@@ -42,9 +42,26 @@ export class ZabbixAPIConnector {
   request(method, params) {
     return this.tsdbRequest(method, params).then(response => {
       const result = this.handleTsdbResponse(response);
-      
+
       return result;
     });
+
+    // return this.zabbixAPICore.request(this.url, method, params, this.requestOptions, this.auth)
+    // .catch(error => {
+    //   if (isNotAuthorized(error.data)) {
+    //     // Handle auth errors
+    //     this.loginErrorCount++;
+    //     if (this.loginErrorCount > this.maxLoginAttempts) {
+    //       this.loginErrorCount = 0;
+    //       return null;
+    //     } else {
+    //       return this.loginOnce()
+    //       .then(() => this.request(method, params));
+    //     }
+    //   } else {
+    //     return Promise.reject(error);
+    //   }
+    // });
   }
 
   tsdbRequest(method, params) {

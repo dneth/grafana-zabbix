@@ -88,3 +88,16 @@ type zabbixParams struct {
 	TimeFrom int64 `json:"time_from,omitempty"`
 	TimeTill int64 `json:"time_till,omitempty"`
 }
+
+type zabbixResponse struct {
+	ID         int                  `json:"id,omitempty"`
+	Result     json.RawMessage      `json:"result,omitempty"`
+	Error      *zabbixResponseError `json:"error,omitempty"`
+	RPCVersion string               `json:"jsonrpc,omitempty"`
+}
+
+type zabbixResponseError struct {
+	Code    int    `json:"code,omitempty"`
+	Message string `json:"message,omitempty"`
+	Data    string `json:"data,omitempty"`
+}
