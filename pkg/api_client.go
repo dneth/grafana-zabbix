@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -52,77 +51,6 @@ func NewZabbixAPIClient() *ZabbixAPIClient {
 			Timeout: time.Duration(time.Second * 30),
 		},
 	}
-}
-
-// DirectQuery handles query requests to Zabbix
-func (ds *ZabbixAPIClient) DirectQuery(ctx context.Context, tsdbReq *datasource.DatasourceRequest) (*datasource.DatasourceResponse, error) {
-	result, queryExistInCache := ds.queryCache.Get(HashString(tsdbReq.String()))
-
-	if queryExistInCache {
-		return BuildResponse(result)
-	}
-
-	dsInfo := tsdbReq.GetDatasource()
-
-	queries := []requestModel{}
-	for _, query := range tsdbReq.Queries {
-		request := requestModel{}
-		err := json.Unmarshal([]byte(query.GetModelJson()), request)
-
-		if err != nil {
-			return nil, err
-		}
-
-		ds.logger.Debug("ZabbixAPIQuery", "method", request.Target.Method, "params", request.Target.Params)
-
-		queries = append(queries, request)
-	}
-
-	if len(queries) == 0 {
-		return nil, errors.New("At least one query should be provided")
-	}
-
-	query := queries[0]
-
-	response, err := ds.RawRequest(ctx, dsInfo, query.Target.Method, query.Target.Params)
-	ds.queryCache.Set(HashString(tsdbReq.String()), response)
-	if err != nil {
-		ds.logger.Debug("ZabbixAPIQuery", "error", err)
-		return nil, errors.New("ZabbixAPIQuery is not implemented yet")
-	}
-
-	return BuildResponse(response)
-}
-
-// TestConnection checks authentication and version of the Zabbix API and returns that info
-func (ds *ZabbixAPIClient) TestConnection(ctx context.Context, tsdbReq *datasource.DatasourceRequest) (*datasource.DatasourceResponse, error) {
-	dsInfo := tsdbReq.GetDatasource()
-
-	auth, err := ds.loginWithDs(ctx, dsInfo)
-	if err != nil {
-		return BuildErrorResponse(fmt.Errorf("Authentication failed: %w", err)), nil
-	}
-	ds.authToken = auth
-
-	result, err := ds.zabbixAPIRequest(ctx, dsInfo.GetUrl(), "apiinfo.version", zabbixParams{}, "")
-	if err != nil {
-		ds.logger.Debug("TestConnection", "error", err)
-		return BuildErrorResponse(fmt.Errorf("Version check failed: %w", err)), nil
-	}
-
-	ds.logger.Debug("TestConnection", "result", string(result))
-
-	var version string
-	err = json.Unmarshal(result, version)
-	if err != nil {
-		return nil, err
-	}
-
-	testResponse := connectionTestResponse{
-		ZabbixVersion: version,
-	}
-
-	return BuildResponse(testResponse)
 }
 
 // RawRequest checks authentication and makes a request to the Zabbix API
@@ -192,7 +120,7 @@ func (ds *ZabbixAPIClient) login(ctx context.Context, apiURL string, username st
 	}
 
 	var auth string
-	err = json.Unmarshal(result, auth)
+	err = json.Unmarshal(result, &auth)
 	if err != nil {
 		return "", err
 	}
@@ -308,7 +236,7 @@ func (ds *ZabbixAPIClient) GetFilteredItems(ctx context.Context, dsInfo *datasou
 	}
 
 	var items zabbix.Items
-	err = json.Unmarshal(result, items)
+	err = json.Unmarshal(result, &items)
 	if err != nil {
 		return nil, err
 	}
@@ -324,7 +252,7 @@ func (ds *ZabbixAPIClient) GetAppsByHostIDs(ctx context.Context, dsInfo *datasou
 	}
 
 	var apps zabbix.Applications
-	err = json.Unmarshal(result, apps)
+	err = json.Unmarshal(result, &apps)
 	if err != nil {
 		return nil, err
 	}
@@ -341,7 +269,7 @@ func (ds *ZabbixAPIClient) GetHostsByGroupIDs(ctx context.Context, dsInfo *datas
 	}
 
 	var hosts zabbix.Hosts
-	err = json.Unmarshal(result, hosts)
+	err = json.Unmarshal(result, &hosts)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +285,7 @@ func (ds *ZabbixAPIClient) GetAllGroups(ctx context.Context, dsInfo *datasource.
 	}
 
 	var groups zabbix.Groups
-	err = json.Unmarshal(result, groups)
+	err = json.Unmarshal(result, &groups)
 	if err != nil {
 		return nil, err
 	}
@@ -428,7 +356,7 @@ func (ds *ZabbixAPIClient) GetTrend(ctx context.Context, tsdbReq *datasource.Dat
 		return nil, err
 	}
 
-	json.Unmarshal(result, trend)
+	json.Unmarshal(result, &trend)
 	if err != nil {
 		return nil, err
 	}

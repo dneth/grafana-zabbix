@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -45,6 +46,73 @@ type categories struct {
 	Time      []map[string]interface{}
 	Alias     []map[string]interface{}
 	Special   []map[string]interface{}
+}
+
+// DirectQuery handles query requests to Zabbix
+func (ds *ZabbixDatasource) DirectQuery(ctx context.Context, tsdbReq *datasource.DatasourceRequest) (*datasource.DatasourceResponse, error) {
+	// result, queryExistInCache := ds.queryCache.Get(HashString(tsdbReq.String()))
+
+	// if queryExistInCache {
+	// 	return BuildResponse(result)
+	// }
+
+	dsInfo := tsdbReq.GetDatasource()
+
+	queries := []requestModel{}
+	for _, query := range tsdbReq.Queries {
+		request := requestModel{}
+		err := json.Unmarshal([]byte(query.GetModelJson()), &request)
+
+		if err != nil {
+			return nil, err
+		}
+
+		ds.logger.Debug("ZabbixAPIQuery", "method", request.Target.Method, "params", request.Target.Params)
+
+		queries = append(queries, request)
+	}
+
+	if len(queries) == 0 {
+		return nil, errors.New("At least one query should be provided")
+	}
+
+	query := queries[0]
+
+	response, err := ds.client.RawRequest(ctx, dsInfo, query.Target.Method, query.Target.Params)
+	// ds.queryCache.Set(HashString(tsdbReq.String()), response)
+	if err != nil {
+		newErr := fmt.Errorf("Error in direct query: %w", err)
+		ds.logger.Error(newErr.Error())
+		return nil, newErr
+	}
+
+	return BuildResponse(response)
+}
+
+// TestConnection checks authentication and version of the Zabbix API and returns that info
+func (ds *ZabbixDatasource) TestConnection(ctx context.Context, tsdbReq *datasource.DatasourceRequest) (*datasource.DatasourceResponse, error) {
+	dsInfo := tsdbReq.GetDatasource()
+
+	result, err := ds.client.RawRequest(ctx, dsInfo, "apiinfo.version", zabbixParams{})
+	if err != nil {
+		ds.logger.Debug("TestConnection", "error", err)
+		return BuildErrorResponse(fmt.Errorf("Version check failed: %w", err)), nil
+	}
+
+	ds.logger.Debug("TestConnection", "result", string(result))
+
+	var version string
+	err = json.Unmarshal(result, &version)
+	if err != nil {
+		ds.logger.Error("Internal error while parsing response from Zabbix", err.Error())
+		return nil, fmt.Errorf("Internal error while parsing response from Zabbix")
+	}
+
+	testResponse := connectionTestResponse{
+		ZabbixVersion: version,
+	}
+
+	return BuildResponse(testResponse)
 }
 
 func (ds *ZabbixDatasource) queryNumericItems(ctx context.Context, tsdbReq *datasource.DatasourceRequest) (*datasource.DatasourceResponse, error) {

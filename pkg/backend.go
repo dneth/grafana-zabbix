@@ -37,11 +37,11 @@ func (b *ZabbixBackend) Query(ctx context.Context, tsdbReq *datasource.Datasourc
 
 	switch queryType {
 	case "zabbixAPI":
-		return zabbixDs.client.DirectQuery(ctx, tsdbReq)
+		return zabbixDs.DirectQuery(ctx, tsdbReq)
 	case "zabbixAlerting":
 		return zabbixDs.queryNumericItems(ctx, tsdbReq)
 	case "connectionTest":
-		return zabbixDs.client.TestConnection(ctx, tsdbReq)
+		return zabbixDs.TestConnection(ctx, tsdbReq)
 	default:
 		err = errors.New("Query not implemented")
 		return BuildErrorResponse(err), nil
