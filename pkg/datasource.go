@@ -62,7 +62,14 @@ func (ds *ZabbixDatasource) queryNumericItems(ctx context.Context, tsdbReq *data
 		return nil, errors.New("At least one query should be provided")
 	}
 
-	items, err := ds.getItemsFromTarget(ctx, tsdbReq.GetDatasource(), jsonQueries)
+	firstQuery := jsonQueries[0]
+
+	groupFilter := firstQuery.GetPath("group", "filter").MustString()
+	hostFilter := firstQuery.GetPath("host", "filter").MustString()
+	appFilter := firstQuery.GetPath("application", "filter").MustString()
+	itemFilter := firstQuery.GetPath("item", "filter").MustString()
+
+	items, err := ds.getItems(ctx, tsdbReq.GetDatasource(), groupFilter, hostFilter, appFilter, itemFilter, "num")
 	if err != nil {
 		return nil, err
 	}
@@ -75,112 +82,114 @@ func (ds *ZabbixDatasource) queryNumericItems(ctx context.Context, tsdbReq *data
 	return BuildMetricsResponse(metrics)
 }
 
-func (ds *ZabbixDatasource) getItemsFromTarget(ctx context.Context, dsInfo *datasource.DatasourceInfo, jsonQueries []*simplejson.Json) (zabbix.Items, error) {
-	jsonQuery := jsonQueries[0].Get("target")
-	groupFilter := jsonQuery.GetPath("group", "filter").MustString()
-	hostFilter := jsonQuery.GetPath("host", "filter").MustString()
-	appFilter := jsonQuery.GetPath("application", "filter").MustString()
-	itemFilter := jsonQuery.GetPath("item", "filter").MustString()
-
-	apps, hostids, err := ds.getApps(ctx, dsInfo, groupFilter, hostFilter, appFilter)
+func (ds *ZabbixDatasource) getItems(ctx context.Context, dsInfo *datasource.DatasourceInfo, groupFilter string, hostFilter string, appFilter string, itemFilter string, itemType string) (zabbix.Items, error) {
+	hosts, err := ds.getHosts(ctx, dsInfo, groupFilter, hostFilter)
 	if err != nil {
 		return nil, err
 	}
-	var appids []string
-	for i := range apps {
-		appids = append(appids, apps[i].Get("applicationid").MustString())
-	}
 
-	var allItems zabbix.Items
-	if len(hostids) > 0 {
-		allItems, err = ds.client.GetFilteredItems(ctx, dsInfo, hostids, nil, "num")
-	} else if len(appids) > 0 {
-		allItems, err = ds.client.GetFilteredItems(ctx, dsInfo, nil, appids, "num")
-	}
-
-	if err != nil {
-		return nil, err
+	var hostids []string
+	for _, host := range hosts {
+		hostids = append(hostids, host.ID)
 	}
 
 	var items zabbix.Items
-	for _, item := range allItems {
+	if appFilter == "" {
+		items, err = ds.client.GetFilteredItems(ctx, dsInfo, hostids, nil, "num")
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		apps, err := ds.getApps(ctx, dsInfo, hostids, appFilter)
+		if err != nil {
+			return nil, err
+		}
+		var appids []string
+		for _, app := range apps {
+			appids = append(appids, app.ID)
+		}
+		items, err = ds.client.GetFilteredItems(ctx, dsInfo, nil, appids, "num")
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	filteredItems := zabbix.Items{}
+	for _, item := range items {
 		if item.Status == "0" {
 			matched, err := regexp.MatchString(itemFilter, item.Name)
 			if err != nil {
 				ds.logger.Warn(fmt.Errorf("RegExp failed: %w", err).Error())
 			} else if matched {
-				items = append(items, item)
+				filteredItems = append(filteredItems, item)
 			}
 		}
 	}
-	return items, nil
+	return filteredItems, nil
 }
 
-func (ds *ZabbixDatasource) getApps(ctx context.Context, dsInfo *datasource.DatasourceInfo, groupFilter string, hostFilter string, appFilter string) (result []*simplejson.Json, filteredHostids []string, err error) {
-	hosts, err := ds.getHosts(ctx, dsInfo, groupFilter, hostFilter)
+func (ds *ZabbixDatasource) getApps(ctx context.Context, dsInfo *datasource.DatasourceInfo, hostids []string, appFilter string) (zabbix.Applications, error) {
+	apps, err := ds.client.GetAppsByHostIDs(ctx, dsInfo, hostids)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	var hostids []string
-	for i := range hosts {
-		hostids = append(hostids, hosts[i].Get("hostid").MustString())
-	}
-	allApps, err := ds.client.GetAppsByHostIDs(ctx, dsInfo, hostids)
-	if err != nil {
-		return nil, hostids, err
-	}
-	var apps []*simplejson.Json
-	for k := range allApps.Get("result").MustArray() {
-		matched, err := regexp.MatchString(appFilter, allApps.Get("result").GetIndex(k).MustString())
+
+	filteredApps := zabbix.Applications{}
+	for _, app := range apps {
+		// ds.logger.Info(fmt.Sprintf("App: %+v", app))
+		matched, err := regexp.MatchString(appFilter, app.Name)
 		if err != nil {
-			return nil, hostids, err
+			return nil, err
 		} else if matched {
-			apps = append(apps, allApps.Get("result").GetIndex(k))
+			filteredApps = append(filteredApps, app)
 		}
 	}
-	return apps, hostids, nil
+	return filteredApps, nil
 }
 
-func (ds *ZabbixDatasource) getHosts(ctx context.Context, dsInfo *datasource.DatasourceInfo, groupFilter string, hostFilter string) ([]*simplejson.Json, error) {
+func (ds *ZabbixDatasource) getHosts(ctx context.Context, dsInfo *datasource.DatasourceInfo, groupFilter string, hostFilter string) (zabbix.Hosts, error) {
 	groups, err := ds.getGroups(ctx, dsInfo, groupFilter)
 	if err != nil {
 		return nil, err
 	}
+
 	var groupids []string
-	for i := range groups {
-		groupids = append(groupids, groups[i].Get("groupid").MustString())
+	for _, group := range groups {
+		groupids = append(groupids, group.ID)
 	}
-	allHosts, err := ds.client.GetHostsByGroupIDs(ctx, dsInfo, groupids)
+
+	hosts, err := ds.client.GetHostsByGroupIDs(ctx, dsInfo, groupids)
 	if err != nil {
 		return nil, err
 	}
-	var hosts []*simplejson.Json
-	for k := range allHosts.Get("result").MustArray() {
-		matched, err := regexp.MatchString(hostFilter, allHosts.Get("result").GetIndex(k).MustString())
+
+	filteredHosts := zabbix.Hosts{}
+	for _, host := range hosts {
+		matched, err := regexp.MatchString(hostFilter, host.Name)
 		if err != nil {
 			return nil, err
 		} else if matched {
-			hosts = append(hosts, allHosts.Get("result").GetIndex(k))
+			filteredHosts = append(filteredHosts, host)
 		}
 	}
-	return hosts, nil
+	return filteredHosts, nil
 }
 
-func (ds *ZabbixDatasource) getGroups(ctx context.Context, dsInfo *datasource.DatasourceInfo, groupFilter string) ([]*simplejson.Json, error) {
-	allGroups, err := ds.client.GetAllGroups(ctx, dsInfo)
+func (ds *ZabbixDatasource) getGroups(ctx context.Context, dsInfo *datasource.DatasourceInfo, groupFilter string) (zabbix.Groups, error) {
+	groups, err := ds.client.GetAllGroups(ctx, dsInfo)
 	if err != nil {
 		return nil, err
 	}
-	var groups []*simplejson.Json
-	for k := range allGroups.Get("result").MustArray() {
-		matched, err := regexp.MatchString(groupFilter, allGroups.Get("result").GetIndex(k).MustString())
+	filteredGroups := zabbix.Groups{}
+	for _, group := range groups {
+		matched, err := regexp.MatchString(groupFilter, group.Name)
 		if err != nil {
 			return nil, err
 		} else if matched {
-			groups = append(groups, allGroups.Get("result").GetIndex(k))
+			filteredGroups = append(filteredGroups, group)
 		}
 	}
-	return groups, nil
+	return filteredGroups, nil
 }
 
 func (ds *ZabbixDatasource) queryNumericDataForItems(ctx context.Context, tsdbReq *datasource.DatasourceRequest, items zabbix.Items, jsonQueries []*simplejson.Json, useTrend bool) ([]*datasource.TimeSeries, error) {
@@ -191,28 +200,41 @@ func (ds *ZabbixDatasource) queryNumericDataForItems(ctx context.Context, tsdbRe
 	}
 	ds.logger.Info(consolidateBy)
 
-	history, err := ds.client.GetHistory(ctx, tsdbReq, items)
-	if err != nil {
-		return nil, err
-	}
-	timeSeries, err := convertHistory(history, items)
-	if err != nil {
-		return nil, err
+	var timeSeries []*datasource.TimeSeries
+	if useTrend {
+		trend, err := ds.client.GetTrend(ctx, tsdbReq, items)
+		if err != nil {
+			return nil, err
+		}
+		timeSeries, err = convertTrend(trend, items, valueType)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		history, err := ds.client.GetHistory(ctx, tsdbReq, items)
+		if err != nil {
+			return nil, err
+		}
+		timeSeries, err = convertHistory(history, items)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return timeSeries, nil
 }
+
 func (ds *ZabbixDatasource) getTrendValueType(jsonQueries []*simplejson.Json) string {
 	var trendFunctions []string
 	var trendValueFunc string
 
+	// TODO: loop over actual returned categories
 	for _, j := range new(categories).Trends {
 		trendFunctions = append(trendFunctions, j["name"].(string))
 	}
-
-	for i := range jsonQueries[0].Get("target").MustArray() {
+	for _, k := range jsonQueries[0].Get("functions").MustArray() {
 		for _, j := range trendFunctions {
-			if j == jsonQueries[0].Get("target").GetIndex(i).GetPath("function", "def", "name").MustString() {
+			if j == k.(map[string]interface{})["def"].(map[string]interface{})["name"] {
 				trendValueFunc = j
 			}
 		}
@@ -226,18 +248,24 @@ func (ds *ZabbixDatasource) getTrendValueType(jsonQueries []*simplejson.Json) st
 }
 
 func (ds *ZabbixDatasource) getConsolidateBy(jsonQueries []*simplejson.Json) string {
-	var consolidateBy []string
-	for i, j := range jsonQueries[0].Get("target").MustArray() {
-		if jsonQueries[0].Get("target").GetIndex(i).GetPath("function", "def", "name").MustString() == "consolidateBy" {
-			consolidateBy = append(consolidateBy, j.(string))
+	var consolidateBy string
+
+	for _, k := range jsonQueries[0].Get("functions").MustArray() {
+		if k.(map[string]interface{})["def"].(map[string]interface{})["name"] == "consolidateBy" {
+			defParams := k.(map[string]interface{})["def"].(map[string]interface{})["params"].([]interface{})
+			if len(defParams) > 0 {
+				consolidateBy = defParams[0].(string)
+			}
 		}
 	}
-	return consolidateBy[0]
+	return consolidateBy
 }
 
 func isUseTrend(timeRange *datasource.TimeRange) bool {
-	if (timeRange.GetFromEpochMs() < 7*24*time.Hour.Nanoseconds()/1000000) ||
-		(timeRange.GetFromEpochMs()-timeRange.GetToEpochMs() > 4*24*time.Hour.Nanoseconds()/1000000) {
+	fromSec := timeRange.GetFromEpochMs() / 1000
+	toSec := timeRange.GetToEpochMs() / 1000
+	if (fromSec < time.Now().Add(time.Hour*-7*24).Unix()) ||
+		(toSec-fromSec > (4 * 24 * time.Hour).Milliseconds()) {
 		return true
 	}
 	return false
@@ -267,14 +295,37 @@ func convertHistory(history zabbix.History, items zabbix.Items) ([]*datasource.T
 	return seriesList, nil
 }
 
-// BuildMetricsResponse builds a response object using a given TimeSeries array
-func BuildMetricsResponse(metrics []*datasource.TimeSeries) (*datasource.DatasourceResponse, error) {
-	return &datasource.DatasourceResponse{
-		Results: []*datasource.QueryResult{
-			&datasource.QueryResult{
-				RefId:  "zabbixMetrics",
-				Series: metrics,
-			},
-		},
-	}, nil
+func convertTrend(history zabbix.Trend, items zabbix.Items, trendValueType string) ([]*datasource.TimeSeries, error) {
+	var trendValueFunc func(zabbix.TrendPoint) float64
+	switch trendValueType {
+	case "min":
+		trendValueFunc = func(tp zabbix.TrendPoint) float64 { return tp.ValueMin }
+	case "avg":
+		trendValueFunc = func(tp zabbix.TrendPoint) float64 { return tp.ValueAvg }
+	case "max":
+		trendValueFunc = func(tp zabbix.TrendPoint) float64 { return tp.ValueMax }
+	}
+
+	seriesMap := map[string]*datasource.TimeSeries{}
+
+	for _, item := range items {
+		seriesMap[item.ID] = &datasource.TimeSeries{
+			Name:   fmt.Sprintf("%s %s", item.Hosts[0].Name, item.Name),
+			Points: []*datasource.Point{},
+		}
+	}
+
+	for _, point := range history {
+		seriesMap[point.ItemID].Points = append(seriesMap[point.ItemID].Points, &datasource.Point{
+			Timestamp: point.Clock * 1000,
+			Value:     trendValueFunc(point),
+		})
+
+	}
+
+	seriesList := []*datasource.TimeSeries{}
+	for _, series := range seriesMap {
+		seriesList = append(seriesList, series)
+	}
+	return seriesList, nil
 }

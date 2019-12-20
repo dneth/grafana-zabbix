@@ -13,8 +13,8 @@ import (
 	"golang.org/x/net/context"
 )
 
-type mockZabbixDatasource struct {
-	ZabbixDatasource
+type mockZabbixAPIClient struct {
+	ZabbixAPIClient
 }
 
 type RoundTripFunc func(req *http.Request) *http.Response
@@ -48,8 +48,8 @@ func mockDataSourceRequest(modelJSON string) *datasource.DatasourceRequest {
 	}
 }
 
-var mockDataSource = mockZabbixDatasource{
-	ZabbixDatasource{
+var mockDataSource = mockZabbixAPIClient{
+	ZabbixAPIClient{
 		queryCache: NewCache(10*time.Minute, 10*time.Minute),
 		httpClient: NewTestClient(func(req *http.Request) *http.Response {
 			return &http.Response{
@@ -63,8 +63,8 @@ var mockDataSource = mockZabbixDatasource{
 	},
 }
 
-var mockDataSourceError = mockZabbixDatasource{
-	ZabbixDatasource{
+var mockDataSourceError = mockZabbixAPIClient{
+	ZabbixAPIClient{
 		queryCache: NewCache(10*time.Minute, 10*time.Minute),
 		httpClient: NewTestClient(func(req *http.Request) *http.Response {
 			return &http.Response{
@@ -148,8 +148,8 @@ func TestZabbixRequest(t *testing.T) {
 }
 
 func TestZabbixRequestWithNoAuthToken(t *testing.T) {
-	var mockDataSource = mockZabbixDatasource{
-		ZabbixDatasource{
+	var mockDataSource = mockZabbixAPIClient{
+		ZabbixAPIClient{
 			queryCache: NewCache(10*time.Minute, 10*time.Minute),
 			httpClient: NewTestClient(func(req *http.Request) *http.Response {
 				return &http.Response{
@@ -231,7 +231,7 @@ func TestHandleAPIResultError(t *testing.T) {
 	assert.Nil(t, expectedResponse)
 }
 
-// func TestZabbixDatasource_getHistotyOrTrend(t *testing.T) {
+// func TestZabbixAPIClient_getHistotyOrTrend(t *testing.T) {
 // 	type args struct {
 // 		items    zabbix.Items
 // 		useTrend bool
