@@ -274,19 +274,13 @@ func (ds *ZabbixDatasource) queryNumericDataForItems(ctx context.Context, tsdbRe
 		if err != nil {
 			return nil, err
 		}
-		timeSeries, err = convertTrend(trend, items, valueType)
-		if err != nil {
-			return nil, err
-		}
+		timeSeries = convertTrend(trend, items, valueType)
 	} else {
 		history, err := ds.client.GetHistory(ctx, tsdbReq, items)
 		if err != nil {
 			return nil, err
 		}
-		timeSeries, err = convertHistory(history, items)
-		if err != nil {
-			return nil, err
-		}
+		timeSeries = convertHistory(history, items)
 	}
 
 	return timeSeries, nil
@@ -339,7 +333,7 @@ func isUseTrend(timeRange *datasource.TimeRange) bool {
 	return false
 }
 
-func convertHistory(history zabbix.History, items zabbix.Items) ([]*datasource.TimeSeries, error) {
+func convertHistory(history zabbix.History, items zabbix.Items) []*datasource.TimeSeries {
 	seriesMap := map[string]*datasource.TimeSeries{}
 
 	for _, item := range items {
@@ -360,10 +354,10 @@ func convertHistory(history zabbix.History, items zabbix.Items) ([]*datasource.T
 	for _, series := range seriesMap {
 		seriesList = append(seriesList, series)
 	}
-	return seriesList, nil
+	return seriesList
 }
 
-func convertTrend(history zabbix.Trend, items zabbix.Items, trendValueType string) ([]*datasource.TimeSeries, error) {
+func convertTrend(history zabbix.Trend, items zabbix.Items, trendValueType string) []*datasource.TimeSeries {
 	var trendValueFunc func(zabbix.TrendPoint) float64
 	switch trendValueType {
 	case "min":
@@ -395,5 +389,5 @@ func convertTrend(history zabbix.Trend, items zabbix.Items, trendValueType strin
 	for _, series := range seriesMap {
 		seriesList = append(seriesList, series)
 	}
-	return seriesList, nil
+	return seriesList
 }
