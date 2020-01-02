@@ -75,8 +75,13 @@ func TestZabbixBackend_getCachedDatasource(t *testing.T) {
 			}
 			got := b.getCachedDatasource(tt.request)
 
-			// Only checking the authToken, being the easiest value to, and guarantee equality for
+			// Only checking the hash, being the easiest value to, and guarantee equality for
 			assert.Equal(t, tt.want.hash, got.hash)
+
+			// Ensure the datasource is in the cache
+			cacheds, ok := tt.cache.Get(HashDatasourceInfo(tt.request.GetDatasource()))
+			assert.Equal(t, true, ok)
+			assert.Equal(t, got, cacheds)
 		})
 	}
 }

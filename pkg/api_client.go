@@ -79,12 +79,6 @@ func (ds *ZabbixAPIClient) RawRequest(ctx context.Context, dsInfo *datasource.Da
 }
 
 func (ds *ZabbixAPIClient) loginWithDs(ctx context.Context, dsInfo *datasource.DatasourceInfo) (string, error) {
-	zabbixURLStr := dsInfo.GetUrl()
-	zabbixURL, err := url.Parse(zabbixURLStr)
-	if err != nil {
-		return "", err
-	}
-
 	jsonDataStr := dsInfo.GetJsonData()
 	jsonData, err := simplejson.NewJson([]byte(jsonDataStr))
 	if err != nil {
@@ -99,12 +93,11 @@ func (ds *ZabbixAPIClient) loginWithDs(ctx context.Context, dsInfo *datasource.D
 		zabbixPassword = jsonData.Get("password").MustString()
 	}
 
-	auth, err := ds.login(ctx, zabbixURLStr, zabbixLogin, zabbixPassword)
+	auth, err := ds.login(ctx, dsInfo.GetUrl(), zabbixLogin, zabbixPassword)
 	if err != nil {
 		ds.logger.Error("loginWithDs", "error", err)
 		return "", err
 	}
-	ds.logger.Debug("loginWithDs", "url", zabbixURL, "user", zabbixLogin, "auth", auth)
 
 	return auth, nil
 }
@@ -130,6 +123,9 @@ func (ds *ZabbixAPIClient) login(ctx context.Context, apiURL string, username st
 
 func (ds *ZabbixAPIClient) zabbixAPIRequest(ctx context.Context, apiURL string, method string, params zabbixParams, auth string) (json.RawMessage, error) {
 	zabbixURL, err := url.Parse(apiURL)
+	if err != nil {
+		return nil, err
+	}
 
 	// TODO: inject auth token (obtain from 'user.login' first)
 	apiRequest := map[string]interface{}{
@@ -164,13 +160,14 @@ func (ds *ZabbixAPIClient) zabbixAPIRequest(ctx context.Context, apiURL string, 
 		Body: rc,
 	}
 
+	tStart := time.Now()
 	response, err := makeHTTPRequest(ctx, ds.httpClient, req)
 	if err != nil {
 		return nil, err
 	}
 
-	ds.logger.Debug("zabbixAPIRequest", "response", string(response))
-
+	requestTime := time.Now().Sub(tStart)
+	ds.logger.Debug("Response from Zabbix Request", "method", method, "requestTime", requestTime)
 	return handleAPIResult(response)
 }
 
@@ -313,9 +310,9 @@ func (ds *ZabbixAPIClient) GetHistory(ctx context.Context, tsdbReq *datasource.D
 			SortField: "clock",
 			SortOrder: "ASC",
 			ItemIDs:   itemids,
-			TimeFrom:  timeRange.GetFromEpochMs(),
-			TimeTill:  timeRange.GetToEpochMs(),
-			History:   valueType,
+			TimeFrom:  timeRange.GetFromEpochMs() / 1000,
+			TimeTill:  timeRange.GetToEpochMs() / 1000,
+			History:   &valueType,
 		}
 
 		var history zabbix.History
