@@ -330,6 +330,7 @@ func (ds *ZabbixAPIClient) GetHistory(ctx context.Context, tsdbReq *datasource.D
 
 		totalHistory = append(totalHistory, history...)
 	}
+	ds.logger.Debug("getHistory", "count", len(totalHistory))
 	return totalHistory, nil
 }
 
