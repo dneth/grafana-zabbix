@@ -323,7 +323,7 @@ func (ds *ZabbixAPIClient) GetHistory(ctx context.Context, tsdbReq *datasource.D
 			return nil, err
 		}
 
-		json.Unmarshal(result, history)
+		err = json.Unmarshal(result, &history)
 		if err != nil {
 			return nil, err
 		}
@@ -356,7 +356,7 @@ func (ds *ZabbixAPIClient) GetTrend(ctx context.Context, tsdbReq *datasource.Dat
 		return nil, err
 	}
 
-	json.Unmarshal(result, &trend)
+	err = json.Unmarshal(result, &trend)
 	if err != nil {
 		return nil, err
 	}
