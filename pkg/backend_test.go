@@ -24,7 +24,7 @@ func TestZabbixBackend_getCachedDatasource(t *testing.T) {
 	}
 	altDatasourceInfoHash := HashDatasourceInfo(altDatasourceInfo)
 
-	modifiedDatasource := NewZabbixDatasourceWithHash("UNIQUE_HASH")
+	modifiedDatasource := NewZabbixDatasourceWithHash(hclog.NewNullLogger(), "UNIQUE_HASH")
 
 	tests := []struct {
 		name    string
@@ -37,7 +37,7 @@ func TestZabbixBackend_getCachedDatasource(t *testing.T) {
 			request: &datasource.DatasourceRequest{
 				Datasource: basicDatasourceInfo,
 			},
-			want: NewZabbixDatasourceWithHash(HashDatasourceInfo(basicDatasourceInfo)),
+			want: NewZabbixDatasourceWithHash(hclog.NewNullLogger(), HashDatasourceInfo(basicDatasourceInfo)),
 		},
 		{
 			name: "Uncached Datasource (cache miss)",
@@ -47,12 +47,12 @@ func TestZabbixBackend_getCachedDatasource(t *testing.T) {
 			request: &datasource.DatasourceRequest{
 				Datasource: altDatasourceInfo,
 			},
-			want: NewZabbixDatasourceWithHash(HashDatasourceInfo(altDatasourceInfo)),
+			want: NewZabbixDatasourceWithHash(hclog.NewNullLogger(), HashDatasourceInfo(altDatasourceInfo)),
 		},
 		{
 			name: "Cached Datasource",
 			cache: cache.NewFrom(cache.NoExpiration, cache.NoExpiration, map[string]cache.Item{
-				altDatasourceInfoHash:   cache.Item{Object: NewZabbixDatasource()},
+				altDatasourceInfoHash:   cache.Item{Object: NewZabbixDatasource(hclog.NewNullLogger())},
 				basicDatasourceInfoHash: cache.Item{Object: modifiedDatasource},
 			}),
 			request: &datasource.DatasourceRequest{

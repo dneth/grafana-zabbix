@@ -30,9 +30,10 @@ type ZabbixAPIClient struct {
 }
 
 // NewZabbixAPIClient returns an initialized ZabbixDatasource
-func NewZabbixAPIClient() *ZabbixAPIClient {
+func NewZabbixAPIClient(logger hclog.Logger) *ZabbixAPIClient {
 	return &ZabbixAPIClient{
 		queryCache: NewCache(10*time.Minute, 10*time.Minute),
+		logger:     logger,
 		httpClient: &http.Client{
 			Transport: &http.Transport{
 				TLSClientConfig: &tls.Config{
@@ -193,14 +194,15 @@ func makeHTTPRequest(ctx context.Context, httpClient *http.Client, req *http.Req
 	}
 	defer res.Body.Close()
 
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("invalid status code. status: %v", res.Status)
-	}
-
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
 		return nil, err
 	}
+
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Error returned from Zabbix service: %v\n%v", res.Status, body)
+	}
+
 	return body, nil
 }
 

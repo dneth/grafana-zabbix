@@ -21,18 +21,17 @@ type ZabbixBackend struct {
 }
 
 func (b *ZabbixBackend) newZabbixDatasource(hash string) *ZabbixDatasource {
-	ds := NewZabbixDatasourceWithHash(hash)
-	ds.logger = b.logger
+	ds := NewZabbixDatasourceWithHash(b.logger, hash)
 	return ds
 }
 
 // Query receives requests from the Grafana backend. Requests are filtered by query type and sent to the
 // applicable ZabbixDatasource.
-func (b *ZabbixBackend) Query(ctx context.Context, tsdbReq *datasource.DatasourceRequest) (resp *datasource.DatasourceResponse, _e error) {
+func (b *ZabbixBackend) Query(ctx context.Context, tsdbReq *datasource.DatasourceRequest) (resp *datasource.DatasourceResponse, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			pErr, _ := r.(error)
-			b.logger.Error("Fatal error in Zabbix Plugin Backend", "Error", pErr)
+			err, _ = r.(error)
+			b.logger.Error("Fatal error in Zabbix Plugin Backend", "Error", err)
 			b.logger.Error(string(debug.Stack()))
 			resp = BuildErrorResponse(fmt.Errorf("Unrecoverable error in grafana-zabbix plugin backend"))
 		}
@@ -57,6 +56,9 @@ func (b *ZabbixBackend) Query(ctx context.Context, tsdbReq *datasource.Datasourc
 		return BuildErrorResponse(err), nil
 	}
 
+	if resp == nil && err != nil {
+		BuildErrorResponse(fmt.Errorf("Internal error in grafana-zabbix plugin"))
+	}
 	return
 }
 

@@ -24,16 +24,18 @@ type ZabbixDatasource struct {
 }
 
 // NewZabbixDatasource returns an instance of ZabbixDatasource with an API Client
-func NewZabbixDatasource() *ZabbixDatasource {
+func NewZabbixDatasource(logger hclog.Logger) *ZabbixDatasource {
 	return &ZabbixDatasource{
-		client: NewZabbixAPIClient(),
+		client: NewZabbixAPIClient(logger),
+		logger: logger,
 	}
 }
 
 // NewZabbixDatasourceWithHash returns an instance of ZabbixDatasource with an API Client and the given identifying hash
-func NewZabbixDatasourceWithHash(hash string) *ZabbixDatasource {
+func NewZabbixDatasourceWithHash(logger hclog.Logger, hash string) *ZabbixDatasource {
 	return &ZabbixDatasource{
-		client: NewZabbixAPIClient(),
+		client: NewZabbixAPIClient(logger),
+		logger: logger,
 		hash:   hash,
 	}
 }
@@ -67,7 +69,9 @@ func (ds *ZabbixDatasource) DirectQuery(ctx context.Context, tsdbReq *datasource
 			return nil, err
 		}
 
-		ds.logger.Debug("ZabbixAPIQuery", "method", request.Target.Method, "params", request.Target.Params)
+		debugParams, _ := json.Marshal(request.Target.Params)
+
+		ds.logger.Debug("ZabbixAPIQuery", "method", request.Target.Method, "params", string(debugParams))
 
 		queries = append(queries, request)
 	}
@@ -175,8 +179,7 @@ func (ds *ZabbixDatasource) getItems(ctx context.Context, dsInfo *datasource.Dat
 	ds.logger.Debug("getItems", "finished", "getHosts", "timeElapsed", time.Now().Sub(tStart))
 
 	var items zabbix.Items
-	// TODO: This condition doesn't seem right
-	if len(hostids) > 0 {
+	if appFilter == "" {
 		items, err = ds.client.GetFilteredItems(ctx, dsInfo, hostids, nil, "num")
 		if err != nil {
 			return nil, err
