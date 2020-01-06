@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/alexanderzobnin/grafana-zabbix/pkg/zabbix"
-	simplejson "github.com/bitly/go-simplejson"
 	"github.com/grafana/grafana_plugin_model/go/datasource"
 	hclog "github.com/hashicorp/go-hclog"
 	"golang.org/x/net/context"
@@ -71,7 +70,7 @@ func (ds *ZabbixDatasource) DirectQuery(ctx context.Context, tsdbReq *datasource
 
 		debugParams, _ := json.Marshal(request.Target.Params)
 
-		ds.logger.Debug("ZabbixAPIQuery", "method", request.Target.Method, "params", string(debugParams))
+		ds.logger.Debug("DirectQuery", "method", request.Target.Method, "params", string(debugParams))
 
 		queries = append(queries, request)
 	}
@@ -119,49 +118,58 @@ func (ds *ZabbixDatasource) TestConnection(ctx context.Context, tsdbReq *datasou
 	return BuildResponse(testResponse)
 }
 
-func (ds *ZabbixDatasource) queryNumericItems(ctx context.Context, tsdbReq *datasource.DatasourceRequest) (*datasource.DatasourceResponse, error) {
+func (ds *ZabbixDatasource) TimeseriesQuery(ctx context.Context, tsdbReq *datasource.DatasourceRequest) (*datasource.DatasourceResponse, error) {
 	tStart := time.Now()
-	jsonQueries := make([]*simplejson.Json, 0)
+	queries := make([]*TargetModel, 0)
+	responses := make([]*datasource.QueryResult, 0)
 	for _, query := range tsdbReq.Queries {
-		json, err := simplejson.NewJson([]byte(query.ModelJson))
+		var model TargetModel
+		err := json.Unmarshal([]byte(query.ModelJson), &model)
+		if err != nil {
+			ds.logger.Error("Failed to unmarshal query target", "error", err.Error(), "modelJSON", query.ModelJson)
+			response := &datasource.QueryResult{
+				RefId: query.RefId,
+				Error: fmt.Sprintf("Unable to parse query %s\n%s", query.RefId, err.Error()),
+			}
+			responses = append(responses, response)
+			continue
+		}
+
+		queries = append(queries, &model)
+	}
+
+	if len(queries) == 0 {
+		response, err := BuildMetricsResponse(responses)
 		if err != nil {
 			return nil, err
 		}
-
-		jsonQueries = append(jsonQueries, json)
+		return response, errors.New("At least one query should be provided")
 	}
 
-	if len(jsonQueries) == 0 {
-		return nil, errors.New("At least one query should be provided")
+	for _, query := range queries {
+		ds.logger.Debug("TimeseriesQuery", "func", "ds.getItems", "query", fmt.Sprintf("%+v", query))
+
+		// TODO: Return a client error or a server error and handle them differently
+		items, err := ds.getItems(ctx, tsdbReq.GetDatasource(), query.Group.Filter, query.Host.Filter, query.Application.Filter, query.Item.Filter, "num")
+		if err != nil {
+			return nil, err
+		}
+		ds.logger.Debug("TimeseriesQuery", "finished", "ds.getItems", "timeElapsed", time.Now().Sub(tStart))
+
+		metrics, err := ds.queryNumericDataForItems(ctx, tsdbReq, items, query, isUseTrend(tsdbReq.GetTimeRange()))
+		if err != nil {
+			return nil, err
+		}
+		ds.logger.Debug("TimeseriesQuery", "finished", "queryNumericDataForItems", "timeElapsed", time.Now().Sub(tStart))
+
+		response := &datasource.QueryResult{
+			RefId:  query.RefID,
+			Series: metrics,
+		}
+		responses = append(responses, response)
 	}
 
-	firstQuery := jsonQueries[0]
-
-	groupFilter := firstQuery.GetPath("group", "filter").MustString()
-	hostFilter := firstQuery.GetPath("host", "filter").MustString()
-	appFilter := firstQuery.GetPath("application", "filter").MustString()
-	itemFilter := firstQuery.GetPath("item", "filter").MustString()
-
-	ds.logger.Debug("queryNumericItems",
-		"func", "ds.getItems",
-		"groupFilter", groupFilter,
-		"hostFilter", hostFilter,
-		"appFilter", appFilter,
-		"itemFilter", itemFilter)
-
-	items, err := ds.getItems(ctx, tsdbReq.GetDatasource(), groupFilter, hostFilter, appFilter, itemFilter, "num")
-	if err != nil {
-		return nil, err
-	}
-	ds.logger.Debug("queryNumericItems", "finished", "ds.getItems", "timeElapsed", time.Now().Sub(tStart))
-
-	metrics, err := ds.queryNumericDataForItems(ctx, tsdbReq, items, jsonQueries, isUseTrend(tsdbReq.GetTimeRange()))
-	if err != nil {
-		return nil, err
-	}
-	ds.logger.Debug("queryNumericItems", "finished", "queryNumericDataForItems", "timeElapsed", time.Now().Sub(tStart))
-
-	return BuildMetricsResponse(metrics)
+	return BuildMetricsResponse(responses)
 }
 
 func (ds *ZabbixDatasource) getItems(ctx context.Context, dsInfo *datasource.DatasourceInfo, groupFilter string, hostFilter string, appFilter string, itemFilter string, itemType string) (zabbix.Items, error) {
@@ -277,7 +285,7 @@ func (ds *ZabbixDatasource) getHosts(ctx context.Context, dsInfo *datasource.Dat
 			if re.MatchString(host.Name) {
 				filteredHosts = append(filteredHosts, host)
 			}
-		} else if host.Name == groupFilter {
+		} else if host.Name == hostFilter {
 			filteredHosts = append(filteredHosts, host)
 		}
 	}
@@ -312,9 +320,9 @@ func (ds *ZabbixDatasource) getGroups(ctx context.Context, dsInfo *datasource.Da
 	return filteredGroups, nil
 }
 
-func (ds *ZabbixDatasource) queryNumericDataForItems(ctx context.Context, tsdbReq *datasource.DatasourceRequest, items zabbix.Items, jsonQueries []*simplejson.Json, useTrend bool) ([]*datasource.TimeSeries, error) {
-	valueType := ds.getTrendValueType(jsonQueries)
-	consolidateBy := ds.getConsolidateBy(jsonQueries)
+func (ds *ZabbixDatasource) queryNumericDataForItems(ctx context.Context, tsdbReq *datasource.DatasourceRequest, items zabbix.Items, query *TargetModel, useTrend bool) ([]*datasource.TimeSeries, error) {
+	valueType := ds.getTrendValueType(query)
+	consolidateBy := ds.getConsolidateBy(query)
 	if consolidateBy == "" {
 		consolidateBy = valueType
 	}
@@ -338,18 +346,18 @@ func (ds *ZabbixDatasource) queryNumericDataForItems(ctx context.Context, tsdbRe
 	return timeSeries, nil
 }
 
-func (ds *ZabbixDatasource) getTrendValueType(jsonQueries []*simplejson.Json) string {
+func (ds *ZabbixDatasource) getTrendValueType(query *TargetModel) string {
 	var trendFunctions []string
 	var trendValueFunc string
 
 	// TODO: loop over actual returned categories
-	for _, j := range new(categories).Trends {
-		trendFunctions = append(trendFunctions, j["name"].(string))
+	for _, trendFn := range new(categories).Trends {
+		trendFunctions = append(trendFunctions, trendFn["name"].(string))
 	}
-	for _, k := range jsonQueries[0].Get("functions").MustArray() {
-		for _, j := range trendFunctions {
-			if j == k.(map[string]interface{})["def"].(map[string]interface{})["name"] {
-				trendValueFunc = j
+	for _, fn := range query.Functions {
+		for _, trendFn := range trendFunctions {
+			if trendFn == fn.Def.Name {
+				trendValueFunc = trendFn
 			}
 		}
 	}
@@ -361,14 +369,13 @@ func (ds *ZabbixDatasource) getTrendValueType(jsonQueries []*simplejson.Json) st
 	return trendValueFunc
 }
 
-func (ds *ZabbixDatasource) getConsolidateBy(jsonQueries []*simplejson.Json) string {
+func (ds *ZabbixDatasource) getConsolidateBy(query *TargetModel) string {
 	var consolidateBy string
 
-	for _, k := range jsonQueries[0].Get("functions").MustArray() {
-		if k.(map[string]interface{})["def"].(map[string]interface{})["name"] == "consolidateBy" {
-			defParams := k.(map[string]interface{})["def"].(map[string]interface{})["params"].([]interface{})
-			if len(defParams) > 0 {
-				consolidateBy = defParams[0].(string)
+	for _, fn := range query.Functions {
+		if fn.Def.Name == "consolidateBy" {
+			if len(fn.Params) > 0 {
+				consolidateBy = fn.Params[0]
 			}
 		}
 	}

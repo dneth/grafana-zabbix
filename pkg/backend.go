@@ -48,7 +48,7 @@ func (b *ZabbixBackend) Query(ctx context.Context, tsdbReq *datasource.Datasourc
 	case "zabbixAPI":
 		resp, err = zabbixDs.DirectQuery(ctx, tsdbReq)
 	case "query":
-		resp, err = zabbixDs.queryNumericItems(ctx, tsdbReq)
+		resp, err = zabbixDs.TimeseriesQuery(ctx, tsdbReq)
 	case "connectionTest":
 		resp, err = zabbixDs.TestConnection(ctx, tsdbReq)
 	default:
@@ -113,14 +113,9 @@ func BuildResponse(responseData interface{}) (*datasource.DatasourceResponse, er
 }
 
 // BuildMetricsResponse builds a response object using a given TimeSeries array
-func BuildMetricsResponse(metrics []*datasource.TimeSeries) (*datasource.DatasourceResponse, error) {
+func BuildMetricsResponse(results []*datasource.QueryResult) (*datasource.DatasourceResponse, error) {
 	return &datasource.DatasourceResponse{
-		Results: []*datasource.QueryResult{
-			&datasource.QueryResult{
-				RefId:  "zabbixMetrics",
-				Series: metrics,
-			},
-		},
+		Results: results,
 	}, nil
 }
 

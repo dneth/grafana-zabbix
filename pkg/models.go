@@ -15,6 +15,46 @@ type dbConnectionStatus struct {
 	DsName string `json:"dsName"`
 }
 
+type TargetFunction struct {
+	Added  bool                     `json:"added,omitempty"`
+	Def    TargetFunctionDefinition `json:"def,omitempty"`
+	Params []string                 `json:"params,omitempty"`
+	Text   string                   `json:"text,omitempty"`
+}
+
+type TargetFunctionDefinition struct {
+	Category      string                          `json:"category,omitempty"`
+	DefaultParams []string                        `json:"defaultParams,omitempty"`
+	Name          string                          `json:"name,omitempty"`
+	Params        []TargetFunctionDefinitionParam `json:"params,omitempty"`
+}
+
+type TargetFunctionDefinitionParam struct {
+	Name    string   `json:"name,omitempty"`
+	Options []string `json:"options,omitempty"`
+	Type    string   `json:"type,omitempty"`
+}
+
+type TargetFilter struct {
+	Filter string `json:"filter,omitempty"`
+}
+
+type TargetOptions struct {
+	ShowDisabledItems bool `json:"showDisabledItems,omitempty"`
+	SkipEmptyValues   bool `json:"skipEmptyValues,omitempty"`
+}
+
+type TargetModel struct {
+	RefID       string           `json:"refId,omitempty"`
+	Mode        int              `json:"mode,omitempty"`
+	Options     TargetOptions    `json:"options,omitempty"`
+	Functions   []TargetFunction `json:"functions,omitempty"`
+	Application TargetFilter     `json:"application,omitempty"`
+	Group       TargetFilter     `json:"group,omitempty"`
+	Host        TargetFilter     `json:"host,omitempty"`
+	Item        TargetFilter     `json:"item,omitempty"`
+}
+
 type requestModel struct {
 	Target queryRequest `json:"target,omitempty"`
 }
