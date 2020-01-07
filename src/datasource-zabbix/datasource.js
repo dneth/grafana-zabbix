@@ -52,10 +52,6 @@ export class ZabbixDatasource extends DataSourceApi {
 
     const jsonData = migrations.migrateDSConfig(instanceSettings.jsonData);
 
-    // Zabbix API credentials
-    this.username         = jsonData.username;
-    this.password         = jsonData.password;
-
     // Use trends instead history since specified time
     this.trends           = jsonData.trends;
     this.trendsFrom       = jsonData.trendsFrom || '7d';
@@ -82,8 +78,6 @@ export class ZabbixDatasource extends DataSourceApi {
 
     let zabbixOptions = {
       url: this.url,
-      username: this.username,
-      password: this.password,
       basicAuth: this.basicAuth,
       withCredentials: this.withCredentials,
       zabbixVersion: this.zabbixVersion,

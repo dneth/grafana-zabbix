@@ -73,7 +73,19 @@ export interface LegacyZabbixMetricsQuery extends ZabbixMetricsQuery {
   application: { filter: string; name?: string; };
   item: { filter: string; name?: string; };
   itemFilter?: string;
+}
 
+export interface CurrentConfig {
+  secureJsonFields: { [key: string]: boolean };
+  jsonData: ZabbixJsonData;
+  secureJsonData: { username?: string; password?: string; };
+  id: number;
+  name: string;
+}
+
+export interface ConfigController {
+  datasourceSrv: any;
+  current: CurrentConfig;
 }
 
 // export { TemplateSrv } from 'grafana/app/features/templating/template_srv';

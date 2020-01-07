@@ -63,7 +63,7 @@ func (ds *ZabbixAPIClient) RawRequest(ctx context.Context, dsInfo *datasource.Da
 			// Authenticate
 			auth, err := ds.loginWithDs(ctx, dsInfo)
 			if err != nil {
-				return nil, err
+				return nil, fmt.Errorf("Authentication failure: %w", err)
 			}
 			ds.authToken = auth
 		}
@@ -85,8 +85,17 @@ func (ds *ZabbixAPIClient) loginWithDs(ctx context.Context, dsInfo *datasource.D
 	if err != nil {
 		return "", err
 	}
+	var zabbixUsername string
+	if secureUsername, exists := dsInfo.GetDecryptedSecureJsonData()["username"]; exists {
+		zabbixUsername = secureUsername
+	} else {
+		zabbixUsername = jsonData.Get("username").MustString()
+	}
 
-	zabbixLogin := jsonData.Get("username").MustString()
+	if zabbixUsername == "" {
+		return "", fmt.Errorf("Login failed -- no username provided")
+	}
+
 	var zabbixPassword string
 	if securePassword, exists := dsInfo.GetDecryptedSecureJsonData()["password"]; exists {
 		zabbixPassword = securePassword
@@ -94,7 +103,11 @@ func (ds *ZabbixAPIClient) loginWithDs(ctx context.Context, dsInfo *datasource.D
 		zabbixPassword = jsonData.Get("password").MustString()
 	}
 
-	auth, err := ds.login(ctx, dsInfo.GetUrl(), zabbixLogin, zabbixPassword)
+	if zabbixPassword == "" {
+		return "", fmt.Errorf("Login failed -- no password provided")
+	}
+
+	auth, err := ds.login(ctx, dsInfo.GetUrl(), zabbixUsername, zabbixPassword)
 	if err != nil {
 		ds.logger.Error("loginWithDs", "error", err)
 		return "", err
@@ -136,7 +149,7 @@ func (ds *ZabbixAPIClient) zabbixAPIRequest(ctx context.Context, apiURL string, 
 		"params":  params,
 	}
 
-	if auth != "" {
+	if auth != "" && method != "apiinfo.version" {
 		apiRequest["auth"] = auth
 	}
 
@@ -212,6 +225,7 @@ func isNotAuthorized(message string) bool {
 		message == "Not authorized."
 }
 
+// GetFilteredItems queries Zabbix for the items belonging to the provided hosts and apps
 func (ds *ZabbixAPIClient) GetFilteredItems(ctx context.Context, dsInfo *datasource.DatasourceInfo, hostids []string, appids []string, itemtype string) (zabbix.Items, error) {
 	params := zabbixParams{
 		Output:      &zabbixParamOutput{Fields: []string{"itemid", "name", "key_", "value_type", "hostid", "status", "state"}},
@@ -243,6 +257,7 @@ func (ds *ZabbixAPIClient) GetFilteredItems(ctx context.Context, dsInfo *datasou
 	return items, nil
 }
 
+// GetAppsByHostIDs queries Zabbix for the apps found on the given hosts
 func (ds *ZabbixAPIClient) GetAppsByHostIDs(ctx context.Context, dsInfo *datasource.DatasourceInfo, hostids []string) (zabbix.Applications, error) {
 	params := zabbixParams{Output: &zabbixParamOutput{Mode: "extend"}, HostIDs: hostids}
 	result, err := ds.RawRequest(ctx, dsInfo, "application.get", params)
@@ -260,6 +275,7 @@ func (ds *ZabbixAPIClient) GetAppsByHostIDs(ctx context.Context, dsInfo *datasou
 
 }
 
+// GetHostsByGroupIDs queries Zabbix for the hosts belonging to the given groups
 func (ds *ZabbixAPIClient) GetHostsByGroupIDs(ctx context.Context, dsInfo *datasource.DatasourceInfo, groupids []string) (zabbix.Hosts, error) {
 	params := zabbixParams{Output: &zabbixParamOutput{Fields: []string{"hostid", "name", "host"}}, SortField: "name", GroupIDs: groupids}
 	result, err := ds.RawRequest(ctx, dsInfo, "host.get", params)
@@ -276,6 +292,7 @@ func (ds *ZabbixAPIClient) GetHostsByGroupIDs(ctx context.Context, dsInfo *datas
 	return hosts, nil
 }
 
+// GetAllGroups queries Zabbix for all available host groups
 func (ds *ZabbixAPIClient) GetAllGroups(ctx context.Context, dsInfo *datasource.DatasourceInfo) (zabbix.Groups, error) {
 	params := zabbixParams{Output: &zabbixParamOutput{Fields: []string{"groupid", "name"}}, SortField: "name", RealHosts: true}
 	result, err := ds.RawRequest(ctx, dsInfo, "hostgroup.get", params)
@@ -292,6 +309,7 @@ func (ds *ZabbixAPIClient) GetAllGroups(ctx context.Context, dsInfo *datasource.
 	return groups, nil
 }
 
+// GetHistory returns timeseries data for the given items within the bounds of the TSDB request
 func (ds *ZabbixAPIClient) GetHistory(ctx context.Context, tsdbReq *datasource.DatasourceRequest, items zabbix.Items) (zabbix.History, error) {
 	totalHistory := zabbix.History{}
 
@@ -334,6 +352,7 @@ func (ds *ZabbixAPIClient) GetHistory(ctx context.Context, tsdbReq *datasource.D
 	return totalHistory, nil
 }
 
+// GetTrend returns historical timeseries data for the given items within the bounds of the TSDB request
 func (ds *ZabbixAPIClient) GetTrend(ctx context.Context, tsdbReq *datasource.DatasourceRequest, items zabbix.Items) (zabbix.Trend, error) {
 	timeRange := tsdbReq.GetTimeRange()
 

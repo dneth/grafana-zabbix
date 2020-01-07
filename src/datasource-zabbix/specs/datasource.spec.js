@@ -10,8 +10,6 @@ describe('ZabbixDatasource', () => {
     ctx.instanceSettings = {
       jsonData: {
         alerting: false,
-        username: 'zabbix',
-        password: 'zabbix',
         trends: true,
         trendsFrom: '14d',
         trendsRange: '7d',
