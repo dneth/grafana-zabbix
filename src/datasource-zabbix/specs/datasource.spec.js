@@ -2,6 +2,7 @@ import _ from 'lodash';
 import mocks from '../../test-setup/mocks';
 import { Datasource } from "../module";
 import { zabbixTemplateFormat } from "../datasource";
+import { dateMath } from '@grafana/data';
 
 describe('ZabbixDatasource', () => {
   let ctx = {};
@@ -39,7 +40,10 @@ describe('ZabbixDatasource', () => {
           item: {filter: ""}
         }
       ],
-      range: {from: 'now-7d', to: 'now'}
+      range: {
+        from: dateMath.parse('now-1h'),
+        to: dateMath.parse('now')
+      }
     };
 
     it('should return an empty array when no targets are set', (done) => {
@@ -57,7 +61,7 @@ describe('ZabbixDatasource', () => {
       let ranges = ['now-8d', 'now-169h', 'now-1M', 'now-1y'];
 
       _.forEach(ranges, range => {
-        ctx.options.range.from = range;
+        ctx.options.range.from = dateMath.parse(range);
         ctx.ds.queryNumericData = jest.fn();
         ctx.ds.query(ctx.options);
 
@@ -74,7 +78,7 @@ describe('ZabbixDatasource', () => {
       let ranges = ['now-7d', 'now-168h', 'now-1h', 'now-30m', 'now-30s'];
 
       _.forEach(ranges, range => {
-        ctx.options.range.from = range;
+        ctx.options.range.from = dateMath.parse(range);
         ctx.ds.queryNumericData = jest.fn();
         ctx.ds.query(ctx.options);
 
@@ -106,24 +110,19 @@ describe('ZabbixDatasource', () => {
         }
       ]));
 
-      ctx.options = {
-        range: {from: 'now-1h', to: 'now'},
-        targets: [
-          {
-            group: {filter: ""},
-            host: {filter: "Zabbix server"},
-            application: {filter: ""},
-            item: {filter: "System information"},
-            textFilter: "",
-            useCaptureGroups: true,
-            mode: 2,
-            resultFormat: "table",
-            options: {
-              skipEmptyValues: false
-            }
-          }
-        ],
-      };
+      ctx.options.targets = [{
+        group: {filter: ""},
+        host: {filter: "Zabbix server"},
+        application: {filter: ""},
+        item: {filter: "System information"},
+        textFilter: "",
+        useCaptureGroups: true,
+        mode: 2,
+        resultFormat: "table",
+        options: {
+          skipEmptyValues: false
+        }
+      }];
     });
 
     it('should return data in table format', (done) => {

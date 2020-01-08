@@ -52,6 +52,7 @@ jest.mock('grafana/app/core/utils/datemath', () => {
 jest.mock('grafana/app/core/utils/kbn', () => {
   return {
     round_interval: n => n,
+    secondsToHms: n => n + 'ms'
   };
 }, {virtual: true});
 
@@ -84,6 +85,8 @@ jest.mock('jquery', () => 'module not found', {virtual: true});
 jest.mock('@grafana/ui');
 
 jest.mock('@grafana/runtime');
+
+jest.mock('@grafana/data');
 
 // Required for loading angularjs
 let dom = new JSDOM('<html><head><script></script></head><body></body></html>');
