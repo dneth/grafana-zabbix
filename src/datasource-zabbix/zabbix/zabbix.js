@@ -38,6 +38,9 @@ export class Zabbix {
       dbConnectionRetentionPolicy,
     } = options;
 
+    // This is bound to this class later
+    this.getMacros = undefined;
+
     this.enableDirectDBConnection = enableDirectDBConnection;
 
     // Initialize caching proxy for requests
@@ -61,7 +64,6 @@ export class Zabbix {
         this.getTrendsDB = this.cachingProxy.proxyfyWithCache(this.dbConnector.getTrends, 'getTrends', this.dbConnector);
       });
     };
-    this.getMacros = undefined;
   }
 
   initDBConnector(datasourceId, datasourceName, datasourceSrv, options) {

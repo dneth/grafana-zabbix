@@ -86,6 +86,8 @@ jest.mock('@grafana/ui');
 
 jest.mock('@grafana/runtime');
 
+jest.mock('@grafana/data');
+
 // Required for loading angularjs
 let dom = new JSDOM('<html><head><script></script></head><body></body></html>');
 // Setup jsdom
