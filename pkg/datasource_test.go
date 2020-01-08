@@ -1,11 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"regexp"
 	"testing"
+	"time"
 
+	"github.com/alexanderzobnin/grafana-zabbix/pkg/zabbix"
 	"github.com/grafana/grafana_plugin_model/go/datasource"
 	"github.com/hashicorp/go-hclog"
 	"github.com/stretchr/testify/assert"
@@ -27,6 +32,28 @@ func mockDataSourceRequest(modelJSON string) *datasource.DatasourceRequest {
 				ModelJson: modelJSON,
 			},
 		},
+	}
+}
+
+func mockZabbixAPIClient(t *testing.T, mockResponse MockResponse) ZabbixAPIInterface {
+	return &ZabbixAPIClient{
+		queryCache: NewCache(10*time.Minute, 10*time.Minute),
+		httpClient: NewTestClient(func(req *http.Request) *http.Response {
+			return &http.Response{
+				StatusCode: mockResponse.Status,
+				Body:       ioutil.NopCloser(bytes.NewBufferString(mockResponse.Body)),
+				Header:     make(http.Header),
+			}
+		}),
+		authToken: "sampleAuthToken",
+		logger:    hclog.Default(),
+	}
+}
+
+func mockZabbixDatasource(t *testing.T, mockResponse MockResponse) ZabbixDatasource {
+	return ZabbixDatasource{
+		client: mockZabbixAPIClient(t, mockResponse),
+		logger: hclog.Default(),
 	}
 }
 
@@ -236,4 +263,277 @@ func Test_parseFilter(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestGetGroups(t *testing.T) {
+	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "name": "groupname1"},{"groupid": "46489127", "name":"groupname2"}]}`})
+	resp, err := mockZabbixDatasource.getGroups(context.Background(), basicDatasourceInfo, "groupname1")
+
+	assert.Equal(t, "46489126", resp[0].ID)
+	assert.Equal(t, "groupname1", resp[0].Name)
+	assert.Nil(t, err)
+}
+
+func TestGetGroupsRegexFilter(t *testing.T) {
+	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "name": "groupname1"},{"groupid": "46489127", "name":"groupname2"}]}`})
+	resp, err := mockZabbixDatasource.getGroups(context.Background(), basicDatasourceInfo, "/group(.*)/")
+
+	assert.Equal(t, "groupname1", resp[0].Name)
+	assert.Equal(t, "groupname2", resp[1].Name)
+	assert.Nil(t, err)
+}
+
+func TestGetGroupsRegexFilterWithFlags(t *testing.T) {
+	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "name": "groupname1"},{"groupid": "46489127", "name":"groupname2"}]}`})
+	resp, err := mockZabbixDatasource.getGroups(context.Background(), basicDatasourceInfo, "/GROUP(.*)/i")
+
+	assert.Equal(t, "groupname1", resp[0].Name)
+	assert.Equal(t, "groupname2", resp[1].Name)
+	assert.Nil(t, err)
+}
+
+func TestGetGroupsError(t *testing.T) {
+	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 500, Body: ``})
+	resp, err := mockZabbixDatasource.getGroups(context.Background(), basicDatasourceInfo, "groupname1")
+
+	assert.NotNil(t, err)
+	assert.Nil(t, resp)
+}
+
+func TestGetHosts(t *testing.T) {
+	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "name": "hostname1"},{"groupid": "46489127", "hostid": "346522", "name": "hostname2"}]}`})
+	resp, err := mockZabbixDatasource.getHosts(context.Background(), basicDatasourceInfo, "groupname1", "hostname1")
+
+	assert.Equal(t, "764522", resp[0].ID)
+	assert.Equal(t, "hostname1", resp[0].Name)
+	assert.Nil(t, err)
+}
+
+func TestGetHostsRegexFilter(t *testing.T) {
+	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "name": "hostname1"},{"groupid": "46489127", "hostid": "346522", "name": "hostname2"}]}`})
+	resp, err := mockZabbixDatasource.getHosts(context.Background(), basicDatasourceInfo, "/group(.*)/", "/host(.*)/")
+
+	assert.Equal(t, "hostname1", resp[0].Name)
+	assert.Equal(t, "hostname2", resp[1].Name)
+	assert.Nil(t, err)
+}
+
+func TestGetHostsRegexFilterWithFlags(t *testing.T) {
+	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "name": "hostname1"},{"groupid": "46489127", "hostid": "346522", "name": "hostname2"}]}`})
+	resp, err := mockZabbixDatasource.getHosts(context.Background(), basicDatasourceInfo, "/GROUP(.*)/i", "/HOST(.*)/i")
+
+	assert.Equal(t, "hostname1", resp[0].Name)
+	assert.Equal(t, "hostname2", resp[1].Name)
+	assert.Nil(t, err)
+}
+
+func TestGetHostsError(t *testing.T) {
+	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 500, Body: ``})
+	resp, err := mockZabbixDatasource.getHosts(context.Background(), basicDatasourceInfo, "groupname1", "hostname1")
+
+	assert.NotNil(t, err)
+	assert.Nil(t, resp)
+}
+
+func TestGetApps(t *testing.T) {
+	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "applicationid": "7343656", "name": "appname1"}, 
+	{"groupid": "46489127", "hostid": "346522", "applicationid": "7354687", "name": "appname2"}]}`})
+	resp, err := mockZabbixDatasource.getApps(context.Background(), basicDatasourceInfo, []string{"764522", "346522"}, "appname1")
+
+	assert.Equal(t, "7343656", resp[0].ID)
+	assert.Equal(t, "appname1", resp[0].Name)
+	assert.Nil(t, err)
+}
+
+func TestGetAppsRegexFilter(t *testing.T) {
+	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "applicationid": "7343656", "name": "appname1"},
+	{"groupid": "46489127", "hostid": "346522", "applicationid": "7354687", "name": "appname2"}]}`})
+	resp, err := mockZabbixDatasource.getApps(context.Background(), basicDatasourceInfo, []string{"764522", "346522"}, "/app(.*)/")
+
+	assert.Equal(t, "appname1", resp[0].Name)
+	assert.Equal(t, "appname2", resp[1].Name)
+	assert.Nil(t, err)
+}
+
+func TestGetAppsRegexFilterWithFlags(t *testing.T) {
+	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "applicationid": "7343656", "name": "appname1"},
+	{"groupid": "46489127", "hostid": "346522", "applicationid": "7354687", "name": "appname2"}]}`})
+	resp, err := mockZabbixDatasource.getApps(context.Background(), basicDatasourceInfo, []string{"764522", "346522"}, "/APP(.*)/i")
+
+	assert.Equal(t, "appname1", resp[0].Name)
+	assert.Equal(t, "appname2", resp[1].Name)
+	assert.Nil(t, err)
+}
+
+func TestGetAppsError(t *testing.T) {
+	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 500, Body: ``})
+	resp, err := mockZabbixDatasource.getApps(context.Background(), basicDatasourceInfo, []string{"764522", "346522"}, "appname1")
+
+	assert.NotNil(t, err)
+	assert.Nil(t, resp)
+}
+
+func TestGetItems(t *testing.T) {
+	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "applicationid": "7343656", "itemid": "7463587", "name": "itemname1", "status" : "0"}, 
+	{"groupid": "46489127", "hostid": "346522", "applicationid": "7354687", "itemid": "8723443", "name": "itemname2", "status" : "0"}]}`})
+	resp, err := mockZabbixDatasource.getItems(context.Background(), basicDatasourceInfo, "groupname1", "hostname1", "appname1", "itemname1", "num")
+
+	assert.Equal(t, "7463587", resp[0].ID)
+	assert.Equal(t, "itemname1", resp[0].Name)
+	assert.Nil(t, err)
+}
+
+func TestGetItemsRegexFilter(t *testing.T) {
+	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "applicationid": "7343656", "itemid": "7463587", "name": "itemname1", "status" : "0"}, 
+	{"groupid": "46489127", "hostid": "346522", "applicationid": "7354687", "itemid": "8723443", "name": "itemname2", "status" : "0"}]}`})
+	resp, err := mockZabbixDatasource.getItems(context.Background(), basicDatasourceInfo, "/group(.*)/", "/host(.*)/", "/app(.*)/", "/item(.*)/", "num")
+
+	assert.Equal(t, "itemname1", resp[0].Name)
+	assert.Equal(t, "itemname2", resp[1].Name)
+	assert.Nil(t, err)
+}
+
+func TestGetItemsRegexFilterWithFlags(t *testing.T) {
+	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "applicationid": "7343656", "itemid": "7463587", "name": "itemname1", "status" : "0"}, 
+	{"groupid": "46489127", "hostid": "346522", "applicationid": "7354687", "itemid": "8723443", "name": "itemname2", "status" : "0"}]}`})
+	resp, err := mockZabbixDatasource.getItems(context.Background(), basicDatasourceInfo, "/GROUP(.*)/i", "/HOST(.*)/i", "/APP(.*)/i", "/ITEM(.*)/i", "num")
+
+	assert.Equal(t, "itemname1", resp[0].Name)
+	assert.Equal(t, "itemname2", resp[1].Name)
+	assert.Nil(t, err)
+}
+
+func TestGetItemsError(t *testing.T) {
+	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 500, Body: ``})
+	resp, err := mockZabbixDatasource.getItems(context.Background(), basicDatasourceInfo, "groupname1", "hostname1", "appname1", "itemname", "num")
+
+	assert.NotNil(t, err)
+	assert.Nil(t, resp)
+}
+
+func TestGetTrendValueTypeDefault(t *testing.T) {
+	zabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: ``})
+	resp := zabbixDatasource.getTrendValueType(&TargetModel{})
+
+	assert.Equal(t, "avg", resp)
+}
+
+func TestGetConsolidateBy(t *testing.T) {
+	zabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: ``})
+	query := &TargetModel{
+		Functions: []TargetFunction{
+			TargetFunction{
+				Def: TargetFunctionDefinition{
+					Name: "consolidateBy",
+				},
+				Params: []string{"sum", "avg", "min", "max"},
+			},
+		},
+	}
+	resp := zabbixDatasource.getConsolidateBy(query)
+
+	assert.Equal(t, "sum", resp)
+}
+
+func TestGetConsolidateByEmpty(t *testing.T) {
+	zabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: ``})
+	resp := zabbixDatasource.getConsolidateBy(&TargetModel{})
+
+	assert.Equal(t, "", resp)
+}
+
+func TestConvertHistoy(t *testing.T) {
+	mockItems := zabbix.Items{
+		zabbix.Item{
+			ID:   "83745689",
+			Name: "testItem",
+			Hosts: []zabbix.ItemHost{
+				zabbix.ItemHost{
+					Name: "testHost",
+				},
+			},
+		},
+	}
+	mockHistory := zabbix.History{
+		zabbix.HistoryPoint{
+			ItemID: "83745689",
+			Value:  1,
+		},
+		zabbix.HistoryPoint{
+			ItemID: "83745689",
+			Value:  100,
+		},
+	}
+	resp := convertHistory(mockHistory, mockItems)
+
+	assert.Equal(t, "name:\"testHost testItem\" points:<value:1 > points:<value:100 > ", resp[0].String())
+}
+
+func TestConvertTrend(t *testing.T) {
+	mockItems := zabbix.Items{
+		zabbix.Item{
+			ID:   "83745689",
+			Name: "testItem",
+			Hosts: []zabbix.ItemHost{
+				zabbix.ItemHost{
+					Name: "testHost",
+				},
+			},
+		},
+	}
+	mockTrend := zabbix.Trend{
+		zabbix.TrendPoint{
+			ItemID:   "83745689",
+			ValueMin: 1,
+			ValueAvg: 50,
+			ValueMax: 100,
+		},
+		zabbix.TrendPoint{
+			ItemID:   "83745689",
+			ValueMin: 0.1,
+			ValueAvg: 0.5,
+			ValueMax: 1.0,
+		},
+	}
+	resp := convertTrend(mockTrend, mockItems, "avg")
+
+	assert.Equal(t, "name:\"testHost testItem\" points:<value:50 > points:<value:0.5 > ", resp[0].String())
+}
+
+func Test_isUseTrend(t *testing.T) {
+	tests := []struct {
+		name      string
+		timeRange *datasource.TimeRange
+		want      bool
+	}{
+		{
+			name: "History time",
+			timeRange: &datasource.TimeRange{
+				FromEpochMs: time.Now().Add(-time.Hour*48).Unix() * 1000,
+				ToEpochMs:   time.Now().Add(-time.Hour*12).Unix() * 1000,
+			},
+			want: false,
+		},
+		{
+			name: "Trend time (past 7 days)",
+			timeRange: &datasource.TimeRange{
+				FromEpochMs: time.Now().Add(-time.Hour*24*14).Unix() * 1000,
+				ToEpochMs:   time.Now().Add(-time.Hour*24*13).Unix() * 1000,
+			},
+			want: true,
+		},
+		{
+			name: "Trend time (longer than 4 days)",
+			timeRange: &datasource.TimeRange{
+				FromEpochMs: time.Now().Add(-time.Hour*24*8).Unix() * 1000,
+				ToEpochMs:   time.Now().Add(-time.Hour*24*1).Unix() * 1000,
+			},
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		got := isUseTrend(tt.timeRange)
+		assert.Equal(t, tt.want, got, tt.name, tt.timeRange)
+	}
+
 }

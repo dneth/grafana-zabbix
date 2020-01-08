@@ -145,3 +145,17 @@ func TestBuildResponse(t *testing.T) {
 		})
 	}
 }
+
+func TestQueryType(t *testing.T) {
+	resp, err := GetQueryType(mockDataSourceRequest(`{"queryType":"sampleQueryType"}`))
+
+	assert.NilError(t, err)
+	assert.Equal(t, "sampleQueryType", resp)
+}
+
+func TestQueryTypeEmpty(t *testing.T) {
+	resp, err := GetQueryType(mockDataSourceRequest("{}"))
+
+	assert.NilError(t, err)
+	assert.Equal(t, "query", resp)
+}
