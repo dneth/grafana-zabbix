@@ -52,3 +52,5 @@ export const DEFAULT_CONFIG = {
   disableReadOnlyUsersAck: false,
   zabbixVersion: 3,
 };
+
+export const RANGE_VARIABLE_VALUE = 'range_series';
