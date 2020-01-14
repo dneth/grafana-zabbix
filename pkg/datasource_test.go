@@ -57,16 +57,16 @@ func mockZabbixDatasource(t *testing.T, mockResponse MockResponse) ZabbixDatasou
 	}
 }
 
-type MockRawRequestClient struct {
+type MockAPIRequestClient struct {
 	ZabbixAPIInterface
 	t              *testing.T
 	expectedMethod string
-	expectedParams zabbixParams
+	expectedParams ZabbixAPIParams
 	mockResponse   string
 	mockError      error
 }
 
-func (m *MockRawRequestClient) RawRequest(ctx context.Context, dsInfo *datasource.DatasourceInfo, method string, params zabbixParams) (result json.RawMessage, err error) {
+func (m *MockAPIRequestClient) APIRequest(ctx context.Context, method string, params ZabbixAPIParams) (result json.RawMessage, err error) {
 	assert.Equal(m.t, m.expectedMethod, method)
 	assert.Equal(m.t, m.expectedParams, params)
 	if m.mockError != nil {
@@ -76,7 +76,7 @@ func (m *MockRawRequestClient) RawRequest(ctx context.Context, dsInfo *datasourc
 	return []byte(m.mockResponse), nil
 }
 
-func TestZabbixDatasource_DirectQuery(t *testing.T) {
+func TestZabbixDatasource_ZabbixAPIQuery(t *testing.T) {
 	type args struct {
 		ctx     context.Context
 		tsdbReq *datasource.DatasourceRequest
@@ -93,7 +93,7 @@ func TestZabbixDatasource_DirectQuery(t *testing.T) {
 		{
 			name:          "Basic Query",
 			request:       mockDataSourceRequest(`{ "target": { "method": "test.get", "params": { "user": "test" } } }`),
-			expectedQuery: queryRequest{Method: "test.get", Params: zabbixParams{User: "test"}},
+			expectedQuery: queryRequest{Method: "test.get", Params: ZabbixAPIParams{User: "test"}},
 			mockResponse:  `"testResponse"`,
 			want: &datasource.DatasourceResponse{
 				Results: []*datasource.QueryResult{
@@ -119,7 +119,7 @@ func TestZabbixDatasource_DirectQuery(t *testing.T) {
 		{
 			name:          "Error",
 			request:       mockDataSourceRequest(`{ "target": { "method": "test.get", "params": { "user": "test" } } }`),
-			expectedQuery: queryRequest{Method: "test.get", Params: zabbixParams{User: "test"}},
+			expectedQuery: queryRequest{Method: "test.get", Params: ZabbixAPIParams{User: "test"}},
 			mockError:     fmt.Errorf("Test error"),
 			wantErr:       fmt.Errorf("Error in direct query: Test error"),
 		},
@@ -127,7 +127,7 @@ func TestZabbixDatasource_DirectQuery(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ds := &ZabbixDatasource{
-				client: &MockRawRequestClient{
+				client: &MockAPIRequestClient{
 					t:              t,
 					expectedMethod: tt.expectedQuery.Method,
 					expectedParams: tt.expectedQuery.Params,
@@ -138,7 +138,7 @@ func TestZabbixDatasource_DirectQuery(t *testing.T) {
 				hash:   "testhash",
 			}
 
-			got, err := ds.DirectQuery(context.Background(), tt.request)
+			got, err := ds.ZabbixAPIQuery(context.Background(), tt.request)
 
 			if tt.wantErr != nil {
 				assert.EqualError(t, err, tt.wantErr.Error())
@@ -154,17 +154,17 @@ func TestZabbixDatasource_DirectQuery(t *testing.T) {
 
 func TestZabbixDatasource_TestConnection(t *testing.T) {
 	ds := &ZabbixDatasource{
-		client: &MockRawRequestClient{
+		client: &MockAPIRequestClient{
 			t:              t,
 			expectedMethod: "apiinfo.version",
-			expectedParams: zabbixParams{},
+			expectedParams: ZabbixAPIParams{},
 			mockResponse:   `"4.0.0"`,
 		},
 		logger: hclog.Default(),
 		hash:   "testhash",
 	}
 
-	resp, err := ds.TestConnection(context.Background(), mockDataSourceRequest(``))
+	resp, err := ds.TestConnection(context.Background())
 
 	if assert.NoError(t, err) {
 		assert.Equal(t, `{"zabbixVersion":"4.0.0","dbConnectorStatus":null}`, resp.Results[0].GetMetaJson())
@@ -173,17 +173,17 @@ func TestZabbixDatasource_TestConnection(t *testing.T) {
 
 func TestZabbixDatasource_TestConnectionError(t *testing.T) {
 	ds := &ZabbixDatasource{
-		client: &MockRawRequestClient{
+		client: &MockAPIRequestClient{
 			t:              t,
 			expectedMethod: "apiinfo.version",
-			expectedParams: zabbixParams{},
+			expectedParams: ZabbixAPIParams{},
 			mockError:      fmt.Errorf("Test connection error"),
 		},
 		logger: hclog.Default(),
 		hash:   "testhash",
 	}
 
-	resp, err := ds.TestConnection(context.Background(), mockDataSourceRequest(``))
+	resp, err := ds.TestConnection(context.Background())
 
 	if assert.NoError(t, err) {
 		assert.Equal(t, "", resp.Results[0].GetMetaJson())
@@ -193,17 +193,17 @@ func TestZabbixDatasource_TestConnectionError(t *testing.T) {
 
 func TestZabbixDatasource_TestConnectionBadResponse(t *testing.T) {
 	ds := &ZabbixDatasource{
-		client: &MockRawRequestClient{
+		client: &MockAPIRequestClient{
 			t:              t,
 			expectedMethod: "apiinfo.version",
-			expectedParams: zabbixParams{},
+			expectedParams: ZabbixAPIParams{},
 			mockResponse:   `invalid json`,
 		},
 		logger: hclog.Default(),
 		hash:   "testhash",
 	}
 
-	resp, err := ds.TestConnection(context.Background(), mockDataSourceRequest(``))
+	resp, err := ds.TestConnection(context.Background())
 
 	assert.Error(t, err)
 	assert.Nil(t, resp)
@@ -267,7 +267,7 @@ func Test_parseFilter(t *testing.T) {
 
 func TestGetGroups(t *testing.T) {
 	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "name": "groupname1"},{"groupid": "46489127", "name":"groupname2"}]}`})
-	resp, err := mockZabbixDatasource.getGroups(context.Background(), basicDatasourceInfo, "groupname1")
+	resp, err := mockZabbixDatasource.getGroups(context.Background(), "groupname1")
 
 	assert.Equal(t, "46489126", resp[0].ID)
 	assert.Equal(t, "groupname1", resp[0].Name)
@@ -276,7 +276,7 @@ func TestGetGroups(t *testing.T) {
 
 func TestGetGroupsRegexFilter(t *testing.T) {
 	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "name": "groupname1"},{"groupid": "46489127", "name":"groupname2"}]}`})
-	resp, err := mockZabbixDatasource.getGroups(context.Background(), basicDatasourceInfo, "/group(.*)/")
+	resp, err := mockZabbixDatasource.getGroups(context.Background(), "/group(.*)/")
 
 	assert.Equal(t, "groupname1", resp[0].Name)
 	assert.Equal(t, "groupname2", resp[1].Name)
@@ -285,7 +285,7 @@ func TestGetGroupsRegexFilter(t *testing.T) {
 
 func TestGetGroupsRegexFilterWithFlags(t *testing.T) {
 	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "name": "groupname1"},{"groupid": "46489127", "name":"groupname2"}]}`})
-	resp, err := mockZabbixDatasource.getGroups(context.Background(), basicDatasourceInfo, "/GROUP(.*)/i")
+	resp, err := mockZabbixDatasource.getGroups(context.Background(), "/GROUP(.*)/i")
 
 	assert.Equal(t, "groupname1", resp[0].Name)
 	assert.Equal(t, "groupname2", resp[1].Name)
@@ -294,7 +294,7 @@ func TestGetGroupsRegexFilterWithFlags(t *testing.T) {
 
 func TestGetGroupsError(t *testing.T) {
 	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 500, Body: ``})
-	resp, err := mockZabbixDatasource.getGroups(context.Background(), basicDatasourceInfo, "groupname1")
+	resp, err := mockZabbixDatasource.getGroups(context.Background(), "groupname1")
 
 	assert.NotNil(t, err)
 	assert.Nil(t, resp)
@@ -302,7 +302,7 @@ func TestGetGroupsError(t *testing.T) {
 
 func TestGetHosts(t *testing.T) {
 	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "name": "hostname1"},{"groupid": "46489127", "hostid": "346522", "name": "hostname2"}]}`})
-	resp, err := mockZabbixDatasource.getHosts(context.Background(), basicDatasourceInfo, "groupname1", "hostname1")
+	resp, err := mockZabbixDatasource.getHosts(context.Background(), "groupname1", "hostname1")
 
 	assert.Equal(t, "764522", resp[0].ID)
 	assert.Equal(t, "hostname1", resp[0].Name)
@@ -311,7 +311,7 @@ func TestGetHosts(t *testing.T) {
 
 func TestGetHostsRegexFilter(t *testing.T) {
 	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "name": "hostname1"},{"groupid": "46489127", "hostid": "346522", "name": "hostname2"}]}`})
-	resp, err := mockZabbixDatasource.getHosts(context.Background(), basicDatasourceInfo, "/group(.*)/", "/host(.*)/")
+	resp, err := mockZabbixDatasource.getHosts(context.Background(), "/group(.*)/", "/host(.*)/")
 
 	assert.Equal(t, "hostname1", resp[0].Name)
 	assert.Equal(t, "hostname2", resp[1].Name)
@@ -320,7 +320,7 @@ func TestGetHostsRegexFilter(t *testing.T) {
 
 func TestGetHostsRegexFilterWithFlags(t *testing.T) {
 	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "name": "hostname1"},{"groupid": "46489127", "hostid": "346522", "name": "hostname2"}]}`})
-	resp, err := mockZabbixDatasource.getHosts(context.Background(), basicDatasourceInfo, "/GROUP(.*)/i", "/HOST(.*)/i")
+	resp, err := mockZabbixDatasource.getHosts(context.Background(), "/GROUP(.*)/i", "/HOST(.*)/i")
 
 	assert.Equal(t, "hostname1", resp[0].Name)
 	assert.Equal(t, "hostname2", resp[1].Name)
@@ -329,16 +329,16 @@ func TestGetHostsRegexFilterWithFlags(t *testing.T) {
 
 func TestGetHostsError(t *testing.T) {
 	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 500, Body: ``})
-	resp, err := mockZabbixDatasource.getHosts(context.Background(), basicDatasourceInfo, "groupname1", "hostname1")
+	resp, err := mockZabbixDatasource.getHosts(context.Background(), "groupname1", "hostname1")
 
 	assert.NotNil(t, err)
 	assert.Nil(t, resp)
 }
 
 func TestGetApps(t *testing.T) {
-	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "applicationid": "7343656", "name": "appname1"}, 
+	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "applicationid": "7343656", "name": "appname1"},
 	{"groupid": "46489127", "hostid": "346522", "applicationid": "7354687", "name": "appname2"}]}`})
-	resp, err := mockZabbixDatasource.getApps(context.Background(), basicDatasourceInfo, []string{"764522", "346522"}, "appname1")
+	resp, err := mockZabbixDatasource.getApps(context.Background(), []string{"764522", "346522"}, "appname1")
 
 	assert.Equal(t, "7343656", resp[0].ID)
 	assert.Equal(t, "appname1", resp[0].Name)
@@ -348,7 +348,7 @@ func TestGetApps(t *testing.T) {
 func TestGetAppsRegexFilter(t *testing.T) {
 	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "applicationid": "7343656", "name": "appname1"},
 	{"groupid": "46489127", "hostid": "346522", "applicationid": "7354687", "name": "appname2"}]}`})
-	resp, err := mockZabbixDatasource.getApps(context.Background(), basicDatasourceInfo, []string{"764522", "346522"}, "/app(.*)/")
+	resp, err := mockZabbixDatasource.getApps(context.Background(), []string{"764522", "346522"}, "/app(.*)/")
 
 	assert.Equal(t, "appname1", resp[0].Name)
 	assert.Equal(t, "appname2", resp[1].Name)
@@ -358,7 +358,7 @@ func TestGetAppsRegexFilter(t *testing.T) {
 func TestGetAppsRegexFilterWithFlags(t *testing.T) {
 	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "applicationid": "7343656", "name": "appname1"},
 	{"groupid": "46489127", "hostid": "346522", "applicationid": "7354687", "name": "appname2"}]}`})
-	resp, err := mockZabbixDatasource.getApps(context.Background(), basicDatasourceInfo, []string{"764522", "346522"}, "/APP(.*)/i")
+	resp, err := mockZabbixDatasource.getApps(context.Background(), []string{"764522", "346522"}, "/APP(.*)/i")
 
 	assert.Equal(t, "appname1", resp[0].Name)
 	assert.Equal(t, "appname2", resp[1].Name)
@@ -367,16 +367,16 @@ func TestGetAppsRegexFilterWithFlags(t *testing.T) {
 
 func TestGetAppsError(t *testing.T) {
 	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 500, Body: ``})
-	resp, err := mockZabbixDatasource.getApps(context.Background(), basicDatasourceInfo, []string{"764522", "346522"}, "appname1")
+	resp, err := mockZabbixDatasource.getApps(context.Background(), []string{"764522", "346522"}, "appname1")
 
 	assert.NotNil(t, err)
 	assert.Nil(t, resp)
 }
 
 func TestGetItems(t *testing.T) {
-	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "applicationid": "7343656", "itemid": "7463587", "name": "itemname1", "status" : "0"}, 
+	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "applicationid": "7343656", "itemid": "7463587", "name": "itemname1", "status" : "0"},
 	{"groupid": "46489127", "hostid": "346522", "applicationid": "7354687", "itemid": "8723443", "name": "itemname2", "status" : "0"}]}`})
-	resp, err := mockZabbixDatasource.getItems(context.Background(), basicDatasourceInfo, "groupname1", "hostname1", "appname1", "itemname1", "num")
+	resp, err := mockZabbixDatasource.getItems(context.Background(), "groupname1", "hostname1", "appname1", "itemname1", "num")
 
 	assert.Equal(t, "7463587", resp[0].ID)
 	assert.Equal(t, "itemname1", resp[0].Name)
@@ -384,9 +384,9 @@ func TestGetItems(t *testing.T) {
 }
 
 func TestGetItemsRegexFilter(t *testing.T) {
-	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "applicationid": "7343656", "itemid": "7463587", "name": "itemname1", "status" : "0"}, 
+	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "applicationid": "7343656", "itemid": "7463587", "name": "itemname1", "status" : "0"},
 	{"groupid": "46489127", "hostid": "346522", "applicationid": "7354687", "itemid": "8723443", "name": "itemname2", "status" : "0"}]}`})
-	resp, err := mockZabbixDatasource.getItems(context.Background(), basicDatasourceInfo, "/group(.*)/", "/host(.*)/", "/app(.*)/", "/item(.*)/", "num")
+	resp, err := mockZabbixDatasource.getItems(context.Background(), "/group(.*)/", "/host(.*)/", "/app(.*)/", "/item(.*)/", "num")
 
 	assert.Equal(t, "itemname1", resp[0].Name)
 	assert.Equal(t, "itemname2", resp[1].Name)
@@ -394,9 +394,9 @@ func TestGetItemsRegexFilter(t *testing.T) {
 }
 
 func TestGetItemsRegexFilterWithFlags(t *testing.T) {
-	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "applicationid": "7343656", "itemid": "7463587", "name": "itemname1", "status" : "0"}, 
+	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "hostid": "764522", "applicationid": "7343656", "itemid": "7463587", "name": "itemname1", "status" : "0"},
 	{"groupid": "46489127", "hostid": "346522", "applicationid": "7354687", "itemid": "8723443", "name": "itemname2", "status" : "0"}]}`})
-	resp, err := mockZabbixDatasource.getItems(context.Background(), basicDatasourceInfo, "/GROUP(.*)/i", "/HOST(.*)/i", "/APP(.*)/i", "/ITEM(.*)/i", "num")
+	resp, err := mockZabbixDatasource.getItems(context.Background(), "/GROUP(.*)/i", "/HOST(.*)/i", "/APP(.*)/i", "/ITEM(.*)/i", "num")
 
 	assert.Equal(t, "itemname1", resp[0].Name)
 	assert.Equal(t, "itemname2", resp[1].Name)
@@ -405,7 +405,7 @@ func TestGetItemsRegexFilterWithFlags(t *testing.T) {
 
 func TestGetItemsError(t *testing.T) {
 	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 500, Body: ``})
-	resp, err := mockZabbixDatasource.getItems(context.Background(), basicDatasourceInfo, "groupname1", "hostname1", "appname1", "itemname", "num")
+	resp, err := mockZabbixDatasource.getItems(context.Background(), "groupname1", "hostname1", "appname1", "itemname", "num")
 
 	assert.NotNil(t, err)
 	assert.Nil(t, resp)

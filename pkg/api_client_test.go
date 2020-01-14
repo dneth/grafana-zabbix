@@ -46,14 +46,14 @@ func NewMockZabbixAPIClient(t *testing.T, mockResponse MockResponse) ZabbixAPICl
 	}
 }
 
-func TestRawRequest(t *testing.T) {
+func TestAPIRequest(t *testing.T) {
 	mockDataSource := NewMockZabbixAPIClient(t, MockResponse{Status: 200, Body: `{"result":"sampleResult"}`})
-	resp, err := mockDataSource.RawRequest(context.Background(), basicDatasourceInfo, "method", zabbixParams{})
+	resp, err := mockDataSource.APIRequest(context.Background(), basicDatasourceInfo, "method", zabbixParams{})
 	assert.Equal(t, `"sampleResult"`, string(resp))
 	assert.Nil(t, err)
 }
 
-func TestRawRequestWithNoAuthToken(t *testing.T) {
+func TestAPIRequestWithNoAuthToken(t *testing.T) {
 	var mockDataSource = ZabbixAPIClient{
 		queryCache: NewCache(10*time.Minute, 10*time.Minute),
 		httpClient: NewTestClient(func(req *http.Request) *http.Response {
@@ -66,14 +66,14 @@ func TestRawRequestWithNoAuthToken(t *testing.T) {
 		logger: hclog.Default(),
 	}
 
-	resp, err := mockDataSource.RawRequest(context.Background(), basicDatasourceInfo, "method", zabbixParams{})
+	resp, err := mockDataSource.APIRequest(context.Background(), basicDatasourceInfo, "method", zabbixParams{})
 	assert.Equal(t, `"auth"`, string(resp))
 	assert.Nil(t, err)
 }
 
-func TestRawRequestError(t *testing.T) {
+func TestAPIRequestError(t *testing.T) {
 	mockDataSource := NewMockZabbixAPIClient(t, MockResponse{Status: 500, Body: `{"result":"sampleResult"}`})
-	resp, err := mockDataSource.RawRequest(context.Background(), basicDatasourceInfo, "method", zabbixParams{})
+	resp, err := mockDataSource.APIRequest(context.Background(), basicDatasourceInfo, "method", zabbixParams{})
 
 	assert.Nil(t, resp)
 	assert.NotNil(t, err)

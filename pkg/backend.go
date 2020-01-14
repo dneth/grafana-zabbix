@@ -14,30 +14,32 @@ import (
 )
 
 // ZabbixBackend implements the Grafana backend interface and forwards queries to the ZabbixDatasource
-type ZabbixBackend struct {
+type ZabbixPlugin struct {
 	plugin.NetRPCUnsupportedPlugin
 	logger          hclog.Logger
 	datasourceCache *Cache
 }
 
-func (b *ZabbixBackend) newZabbixDatasource(hash string) *ZabbixDatasource {
-	ds := NewZabbixDatasourceWithHash(b.logger, hash)
-	return ds
+func (p *ZabbixPlugin) newZabbixDatasource(dsInfo *datasource.DatasourceInfo) (*ZabbixDatasource, error) {
+	return NewZabbixDatasource(p.logger, dsInfo)
 }
 
 // Query receives requests from the Grafana backend. Requests are filtered by query type and sent to the
 // applicable ZabbixDatasource.
-func (b *ZabbixBackend) Query(ctx context.Context, tsdbReq *datasource.DatasourceRequest) (resp *datasource.DatasourceResponse, err error) {
+func (p *ZabbixPlugin) Query(ctx context.Context, tsdbReq *datasource.DatasourceRequest) (resp *datasource.DatasourceResponse, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err, _ = r.(error)
-			b.logger.Error("Fatal error in Zabbix Plugin Backend", "Error", err)
-			b.logger.Error(string(debug.Stack()))
+			p.logger.Error("Fatal error in Zabbix Plugin Backend", "Error", err)
+			p.logger.Error(string(debug.Stack()))
 			resp = BuildErrorResponse(fmt.Errorf("Unrecoverable error in grafana-zabbix plugin backend"))
 		}
 	}()
 
-	zabbixDs := b.getCachedDatasource(tsdbReq)
+	zabbixDS, err := p.GetDatasource(tsdbReq)
+	if err != nil {
+		return nil, err
+	}
 
 	queryType, err := GetQueryType(tsdbReq)
 	if err != nil {
@@ -46,11 +48,11 @@ func (b *ZabbixBackend) Query(ctx context.Context, tsdbReq *datasource.Datasourc
 
 	switch queryType {
 	case "zabbixAPI":
-		resp, err = zabbixDs.DirectQuery(ctx, tsdbReq)
+		resp, err = zabbixDS.ZabbixAPIQuery(ctx, tsdbReq)
 	case "query":
-		resp, err = zabbixDs.TimeseriesQuery(ctx, tsdbReq)
+		resp, err = zabbixDS.TimeseriesQuery(ctx, tsdbReq)
 	case "connectionTest":
-		resp, err = zabbixDs.TestConnection(ctx, tsdbReq)
+		resp, err = zabbixDS.TestConnection(ctx)
 	default:
 		err = errors.New("Query not implemented")
 		return BuildErrorResponse(err), nil
@@ -62,23 +64,28 @@ func (b *ZabbixBackend) Query(ctx context.Context, tsdbReq *datasource.Datasourc
 	return
 }
 
-func (b *ZabbixBackend) getCachedDatasource(tsdbReq *datasource.DatasourceRequest) *ZabbixDatasource {
+// GetDatasource Returns cached datasource or creates new one
+func (p *ZabbixPlugin) GetDatasource(tsdbReq *datasource.DatasourceRequest) (*ZabbixDatasource, error) {
 	dsInfoHash := HashDatasourceInfo(tsdbReq.GetDatasource())
 
-	if cachedData, ok := b.datasourceCache.Get(dsInfoHash); ok {
+	if cachedData, ok := p.datasourceCache.Get(dsInfoHash); ok {
 		if cachedDS, ok := cachedData.(*ZabbixDatasource); ok {
-			return cachedDS
+			return cachedDS, nil
 		}
 	}
 
-	if b.logger.IsDebug() {
-		dsInfo := tsdbReq.GetDatasource()
-		b.logger.Debug(fmt.Sprintf("Datasource cache miss (Org %d Id %d '%s' %s)", dsInfo.GetOrgId(), dsInfo.GetId(), dsInfo.GetName(), dsInfoHash))
+	dsInfo := tsdbReq.GetDatasource()
+	if p.logger.IsDebug() {
+		p.logger.Debug(fmt.Sprintf("Datasource cache miss (Org %d Id %d '%s' %s)", dsInfo.GetOrgId(), dsInfo.GetId(), dsInfo.GetName(), dsInfoHash))
 	}
 
-	ds := b.newZabbixDatasource(dsInfoHash)
-	b.datasourceCache.Set(dsInfoHash, ds)
-	return ds
+	ds, err := p.newZabbixDatasource(dsInfo)
+	if err != nil {
+		return nil, err
+	}
+
+	p.datasourceCache.Set(dsInfoHash, ds)
+	return ds, nil
 }
 
 // GetQueryType determines the query type from a query or list of queries

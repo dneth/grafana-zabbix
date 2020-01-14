@@ -15,12 +15,12 @@ type ZabbixAPIInterface interface {
 	// TestConnection checks authentication and version of the Zabbix API and returns that info
 	// TestConnection(ctx context.Context, tsdbReq *datasource.DatasourceRequest) (*datasource.DatasourceResponse, error)
 
-	// RawRequest checks authentication and makes a request to the Zabbix API
-	RawRequest(ctx context.Context, dsInfo *datasource.DatasourceInfo, method string, params zabbixParams) (result json.RawMessage, err error)
-	GetFilteredItems(ctx context.Context, dsInfo *datasource.DatasourceInfo, hostids []string, appids []string, itemtype string) (zabbix.Items, error)
-	GetAppsByHostIDs(ctx context.Context, dsInfo *datasource.DatasourceInfo, hostids []string) (zabbix.Applications, error)
-	GetHostsByGroupIDs(ctx context.Context, dsInfo *datasource.DatasourceInfo, groupids []string) (zabbix.Hosts, error)
-	GetAllGroups(ctx context.Context, dsInfo *datasource.DatasourceInfo) (zabbix.Groups, error)
+	// APIRequest checks authentication and makes a request to the Zabbix API
+	APIRequest(ctx context.Context, method string, params ZabbixAPIParams) (result json.RawMessage, err error)
+	GetFilteredItems(ctx context.Context, hostids []string, appids []string, itemtype string) (zabbix.Items, error)
+	GetAppsByHostIDs(ctx context.Context, hostids []string) (zabbix.Applications, error)
+	GetHostsByGroupIDs(ctx context.Context, groupids []string) (zabbix.Hosts, error)
+	GetAllGroups(ctx context.Context) (zabbix.Groups, error)
 	GetHistory(ctx context.Context, tsdbReq *datasource.DatasourceRequest, items zabbix.Items) (zabbix.History, error)
 	GetTrend(ctx context.Context, tsdbReq *datasource.DatasourceRequest, items zabbix.Items) (zabbix.Trend, error)
 }

@@ -60,8 +60,8 @@ type requestModel struct {
 }
 
 type queryRequest struct {
-	Method string       `json:"method,omitempty"`
-	Params zabbixParams `json:"params,omitempty"`
+	Method string          `json:"method,omitempty"`
+	Params ZabbixAPIParams `json:"params,omitempty"`
 }
 
 type zabbixParamOutput struct {
@@ -100,23 +100,36 @@ func (p *zabbixParamOutput) UnmarshalJSON(data []byte) error {
 
 }
 
-type zabbixParams struct {
-	Output    *zabbixParamOutput `json:"output,omitempty"`
-	SortField string             `json:"sortfield,omitempty"`
-	SortOrder string             `json:"sortorder,omitempty"`
-	Filter    map[string][]int   `json:"filter,omitempty"`
+type ZabbixAPIParams struct {
+	Output    *zabbixParamOutput     `json:"output,omitempty"`
+	SortField string                 `json:"sortfield,omitempty"`
+	SortOrder string                 `json:"sortorder,omitempty"`
+	Filter    map[string]interface{} `json:"filter,omitempty"`
 
 	// Login
 	User     string `json:"user,omitempty"`
 	Password string `json:"password,omitempty"`
 
 	// Item GET
-	WebItems    bool     `json:"webitems,omitempty"`
-	SelectHosts []string `json:"selectHosts,omitempty"`
-	ItemIDs     []string `json:"itemids,omitempty"`
-	GroupIDs    []string `json:"groupids,omitempty"`
-	HostIDs     []string `json:"hostids,omitempty"`
-	AppIDs      []string `json:"applicationids,omitempty"`
+	WebItems    bool        `json:"webitems,omitempty"`
+	SelectHosts interface{} `json:"selectHosts,omitempty"`
+	ItemIDs     []string    `json:"itemids,omitempty"`
+	GroupIDs    []string    `json:"groupids,omitempty"`
+	HostIDs     []string    `json:"hostids,omitempty"`
+	AppIDs      []string    `json:"applicationids,omitempty"`
+
+	// event.get
+	SelectAcknowledges interface{} `json:"select_acknowledges,omitempty"`
+	ObjectIDs          []string    `json:"objectids,omitempty"`
+	Value              interface{} `json:"value,omitempty"`
+
+	// trigger.get
+	ExpandDescription bool        `json:"expandDescription,omitempty"`
+	ExpandData        bool        `json:"expandData,omitempty"`
+	ExpandComment     bool        `json:"expandComment,omitempty"`
+	Monitored         bool        `json:"monitored,omitempty"`
+	SkipDependent     bool        `json:"skipDependent,omitempty"`
+	SelectLastEvent   interface{} `json:"selectLastEvent,omitempty"`
 
 	// Host Group GET
 	RealHosts bool `json:"real_hosts,omitempty"`

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,35 +12,44 @@ import (
 	"github.com/alexanderzobnin/grafana-zabbix/pkg/zabbix"
 	"github.com/grafana/grafana_plugin_model/go/datasource"
 	hclog "github.com/hashicorp/go-hclog"
-	"golang.org/x/net/context"
 )
 
 // ZabbixDatasource stores state about a specific datasource and provides methods to make
 // requests to the Zabbix API
 type ZabbixDatasource struct {
 	client ZabbixAPIInterface
-	logger hclog.Logger
+	dsInfo *datasource.DatasourceInfo
 	hash   string
+	logger hclog.Logger
 }
 
 // NewZabbixDatasource returns an instance of ZabbixDatasource with an API Client
-func NewZabbixDatasource(logger hclog.Logger) *ZabbixDatasource {
-	return &ZabbixDatasource{
-		client: NewZabbixAPIClient(logger),
-		logger: logger,
+func NewZabbixDatasource(logger hclog.Logger, dsInfo *datasource.DatasourceInfo) (*ZabbixDatasource, error) {
+	client, err := NewZabbixAPIClient(logger, dsInfo.GetUrl())
+	if err != nil {
+		return nil, err
 	}
+
+	return &ZabbixDatasource{
+		client: client,
+		dsInfo: dsInfo,
+		logger: logger,
+		hash:   HashDatasourceInfo(dsInfo),
+	}, nil
 }
 
 // NewZabbixDatasourceWithHash returns an instance of ZabbixDatasource with an API Client and the given identifying hash
-func NewZabbixDatasourceWithHash(logger hclog.Logger, hash string) *ZabbixDatasource {
-	return &ZabbixDatasource{
-		client: NewZabbixAPIClient(logger),
-		logger: logger,
-		hash:   hash,
+func NewZabbixDatasourceWithHash(logger hclog.Logger, dsInfo *datasource.DatasourceInfo, overrideHash string) (*ZabbixDatasource, error) {
+	ds, err := NewZabbixDatasource(logger, dsInfo)
+	if err != nil {
+		return nil, err
 	}
+	ds.hash = overrideHash
+
+	return ds, nil
 }
 
-type categories struct {
+type FunctionCategories struct {
 	Transform []map[string]interface{}
 	Aggregate []map[string]interface{}
 	Filter    []map[string]interface{}
@@ -50,14 +60,12 @@ type categories struct {
 }
 
 // DirectQuery handles query requests to Zabbix
-func (ds *ZabbixDatasource) DirectQuery(ctx context.Context, tsdbReq *datasource.DatasourceRequest) (*datasource.DatasourceResponse, error) {
+func (ds *ZabbixDatasource) ZabbixAPIQuery(ctx context.Context, tsdbReq *datasource.DatasourceRequest) (*datasource.DatasourceResponse, error) {
 	// result, queryExistInCache := ds.queryCache.Get(HashString(tsdbReq.String()))
 
 	// if queryExistInCache {
 	// 	return BuildResponse(result)
 	// }
-
-	dsInfo := tsdbReq.GetDatasource()
 
 	queries := []requestModel{}
 	for _, query := range tsdbReq.Queries {
@@ -81,7 +89,7 @@ func (ds *ZabbixDatasource) DirectQuery(ctx context.Context, tsdbReq *datasource
 
 	query := queries[0]
 
-	response, err := ds.client.RawRequest(ctx, dsInfo, query.Target.Method, query.Target.Params)
+	response, err := ds.client.APIRequest(ctx, query.Target.Method, query.Target.Params)
 	// ds.queryCache.Set(HashString(tsdbReq.String()), response)
 	if err != nil {
 		newErr := fmt.Errorf("Error in direct query: %w", err)
@@ -93,10 +101,8 @@ func (ds *ZabbixDatasource) DirectQuery(ctx context.Context, tsdbReq *datasource
 }
 
 // TestConnection checks authentication and version of the Zabbix API and returns that info
-func (ds *ZabbixDatasource) TestConnection(ctx context.Context, tsdbReq *datasource.DatasourceRequest) (*datasource.DatasourceResponse, error) {
-	dsInfo := tsdbReq.GetDatasource()
-
-	result, err := ds.client.RawRequest(ctx, dsInfo, "apiinfo.version", zabbixParams{})
+func (ds *ZabbixDatasource) TestConnection(ctx context.Context) (*datasource.DatasourceResponse, error) {
+	result, err := ds.client.APIRequest(ctx, "apiinfo.version", ZabbixAPIParams{})
 	if err != nil {
 		ds.logger.Debug("TestConnection", "error", err)
 		return BuildErrorResponse(fmt.Errorf("Version check failed: %w", err)), nil
@@ -108,7 +114,6 @@ func (ds *ZabbixDatasource) TestConnection(ctx context.Context, tsdbReq *datasou
 	err = json.Unmarshal(result, &version)
 	if err != nil {
 		ds.logger.Error("Internal error while parsing response from Zabbix", err.Error())
-		return nil, fmt.Errorf("Internal error while parsing response from Zabbix")
 	}
 
 	testResponse := connectionTestResponse{
@@ -150,7 +155,7 @@ func (ds *ZabbixDatasource) TimeseriesQuery(ctx context.Context, tsdbReq *dataso
 		ds.logger.Debug("TimeseriesQuery", "func", "ds.getItems", "query", fmt.Sprintf("%+v", query))
 
 		// TODO: Return a client error or a server error and handle them differently
-		items, err := ds.getItems(ctx, tsdbReq.GetDatasource(), query.Group.Filter, query.Host.Filter, query.Application.Filter, query.Item.Filter, "num")
+		items, err := ds.getItems(ctx, query.Group.Filter, query.Host.Filter, query.Application.Filter, query.Item.Filter, "num")
 		if err != nil {
 			return nil, err
 		}
@@ -172,10 +177,10 @@ func (ds *ZabbixDatasource) TimeseriesQuery(ctx context.Context, tsdbReq *dataso
 	return BuildMetricsResponse(responses)
 }
 
-func (ds *ZabbixDatasource) getItems(ctx context.Context, dsInfo *datasource.DatasourceInfo, groupFilter string, hostFilter string, appFilter string, itemFilter string, itemType string) (zabbix.Items, error) {
+func (ds *ZabbixDatasource) getItems(ctx context.Context, groupFilter string, hostFilter string, appFilter string, itemFilter string, itemType string) (zabbix.Items, error) {
 	tStart := time.Now()
 
-	hosts, err := ds.getHosts(ctx, dsInfo, groupFilter, hostFilter)
+	hosts, err := ds.getHosts(ctx, groupFilter, hostFilter)
 	if err != nil {
 		return nil, err
 	}
@@ -188,12 +193,12 @@ func (ds *ZabbixDatasource) getItems(ctx context.Context, dsInfo *datasource.Dat
 
 	var items zabbix.Items
 	if appFilter == "" {
-		items, err = ds.client.GetFilteredItems(ctx, dsInfo, hostids, nil, "num")
+		items, err = ds.client.GetFilteredItems(ctx, hostids, nil, "num")
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		apps, err := ds.getApps(ctx, dsInfo, hostids, appFilter)
+		apps, err := ds.getApps(ctx, hostids, appFilter)
 		if err != nil {
 			return nil, err
 		}
@@ -203,7 +208,7 @@ func (ds *ZabbixDatasource) getItems(ctx context.Context, dsInfo *datasource.Dat
 		}
 		ds.logger.Debug("getItems", "finished", "getApps", "timeElapsed", time.Now().Sub(tStart))
 
-		items, err = ds.client.GetFilteredItems(ctx, dsInfo, nil, appids, "num")
+		items, err = ds.client.GetFilteredItems(ctx, nil, appids, "num")
 		if err != nil {
 			return nil, err
 		}
@@ -233,8 +238,8 @@ func (ds *ZabbixDatasource) getItems(ctx context.Context, dsInfo *datasource.Dat
 	return filteredItems, nil
 }
 
-func (ds *ZabbixDatasource) getApps(ctx context.Context, dsInfo *datasource.DatasourceInfo, hostids []string, appFilter string) (zabbix.Applications, error) {
-	apps, err := ds.client.GetAppsByHostIDs(ctx, dsInfo, hostids)
+func (ds *ZabbixDatasource) getApps(ctx context.Context, hostids []string, appFilter string) (zabbix.Applications, error) {
+	apps, err := ds.client.GetAppsByHostIDs(ctx, hostids)
 	if err != nil {
 		return nil, err
 	}
@@ -258,8 +263,8 @@ func (ds *ZabbixDatasource) getApps(ctx context.Context, dsInfo *datasource.Data
 	return filteredApps, nil
 }
 
-func (ds *ZabbixDatasource) getHosts(ctx context.Context, dsInfo *datasource.DatasourceInfo, groupFilter string, hostFilter string) (zabbix.Hosts, error) {
-	groups, err := ds.getGroups(ctx, dsInfo, groupFilter)
+func (ds *ZabbixDatasource) getHosts(ctx context.Context, groupFilter string, hostFilter string) (zabbix.Hosts, error) {
+	groups, err := ds.getGroups(ctx, groupFilter)
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +274,7 @@ func (ds *ZabbixDatasource) getHosts(ctx context.Context, dsInfo *datasource.Dat
 		groupids = append(groupids, group.ID)
 	}
 
-	hosts, err := ds.client.GetHostsByGroupIDs(ctx, dsInfo, groupids)
+	hosts, err := ds.client.GetHostsByGroupIDs(ctx, groupids)
 	if err != nil {
 		return nil, err
 	}
@@ -294,8 +299,8 @@ func (ds *ZabbixDatasource) getHosts(ctx context.Context, dsInfo *datasource.Dat
 	return filteredHosts, nil
 }
 
-func (ds *ZabbixDatasource) getGroups(ctx context.Context, dsInfo *datasource.DatasourceInfo, groupFilter string) (zabbix.Groups, error) {
-	groups, err := ds.client.GetAllGroups(ctx, dsInfo)
+func (ds *ZabbixDatasource) getGroups(ctx context.Context, groupFilter string) (zabbix.Groups, error) {
+	groups, err := ds.client.GetAllGroups(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -351,7 +356,7 @@ func (ds *ZabbixDatasource) getTrendValueType(query *TargetModel) string {
 	var trendValueFunc string
 
 	// TODO: loop over actual returned categories
-	for _, trendFn := range new(categories).Trends {
+	for _, trendFn := range new(FunctionCategories).Trends {
 		trendFunctions = append(trendFunctions, trendFn["name"].(string))
 	}
 	for _, fn := range query.Functions {
