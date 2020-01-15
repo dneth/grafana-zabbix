@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"regexp"
 	"testing"
 	"time"
@@ -36,7 +37,18 @@ func mockDataSourceRequest(modelJSON string) *datasource.DatasourceRequest {
 }
 
 func mockZabbixAPIClient(t *testing.T, mockResponse MockResponse) ZabbixAPIInterface {
+	testURL, _ := url.Parse("localhost:3306/zabbix")
 	return &ZabbixAPIClient{
+		datasource: &ZabbixDatasource{
+			dsInfo: &datasource.DatasourceInfo{
+				JsonData: "{}",
+				DecryptedSecureJsonData: map[string]string{
+					"username": "testUser",
+					"password": "testSecret",
+				},
+			},
+		},
+		url:        testURL,
 		queryCache: NewCache(10*time.Minute, 10*time.Minute),
 		httpClient: NewTestClient(func(req *http.Request) *http.Response {
 			return &http.Response{
@@ -269,34 +281,34 @@ func TestGetGroups(t *testing.T) {
 	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "name": "groupname1"},{"groupid": "46489127", "name":"groupname2"}]}`})
 	resp, err := mockZabbixDatasource.getGroups(context.Background(), "groupname1")
 
+	assert.NoError(t, err)
 	assert.Equal(t, "46489126", resp[0].ID)
 	assert.Equal(t, "groupname1", resp[0].Name)
-	assert.Nil(t, err)
 }
 
 func TestGetGroupsRegexFilter(t *testing.T) {
 	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "name": "groupname1"},{"groupid": "46489127", "name":"groupname2"}]}`})
 	resp, err := mockZabbixDatasource.getGroups(context.Background(), "/group(.*)/")
 
+	assert.NoError(t, err)
 	assert.Equal(t, "groupname1", resp[0].Name)
 	assert.Equal(t, "groupname2", resp[1].Name)
-	assert.Nil(t, err)
 }
 
 func TestGetGroupsRegexFilterWithFlags(t *testing.T) {
 	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 200, Body: `{"result":[{"groupid": "46489126", "name": "groupname1"},{"groupid": "46489127", "name":"groupname2"}]}`})
 	resp, err := mockZabbixDatasource.getGroups(context.Background(), "/GROUP(.*)/i")
 
+	assert.NoError(t, err)
 	assert.Equal(t, "groupname1", resp[0].Name)
 	assert.Equal(t, "groupname2", resp[1].Name)
-	assert.Nil(t, err)
 }
 
 func TestGetGroupsError(t *testing.T) {
 	mockZabbixDatasource := mockZabbixDatasource(t, MockResponse{Status: 500, Body: ``})
 	resp, err := mockZabbixDatasource.getGroups(context.Background(), "groupname1")
 
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 	assert.Nil(t, resp)
 }
 

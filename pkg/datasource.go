@@ -114,6 +114,7 @@ func (ds *ZabbixDatasource) TestConnection(ctx context.Context) (*datasource.Dat
 	err = json.Unmarshal(result, &version)
 	if err != nil {
 		ds.logger.Error("Internal error while parsing response from Zabbix", err.Error())
+		return nil, fmt.Errorf("Internal error while parsing response from Zabbix")
 	}
 
 	testResponse := connectionTestResponse{

@@ -15,50 +15,66 @@ func TestZabbixBackend_getCachedDatasource(t *testing.T) {
 	basicDatasourceInfo := &datasource.DatasourceInfo{
 		Id:   1,
 		Name: "TestDatasource",
+		Url:  "http://zabbix.org/zabbix",
 	}
 	basicDatasourceInfoHash := HashDatasourceInfo(basicDatasourceInfo)
+	basicDatasource, _ := NewZabbixDatasource(hclog.NewNullLogger(), basicDatasourceInfo)
 
 	altDatasourceInfo := &datasource.DatasourceInfo{
 		Id:   2,
 		Name: "AnotherDatasource",
+		Url:  "http://zabbix.org/zabbix",
 	}
 	altDatasourceInfoHash := HashDatasourceInfo(altDatasourceInfo)
+	altDatasource, _ := NewZabbixDatasource(hclog.NewNullLogger(), altDatasourceInfo)
 
-	modifiedDatasource := NewZabbixDatasourceWithHash(hclog.NewNullLogger(), "UNIQUE_HASH")
+	badDatasourceInfo := &datasource.DatasourceInfo{
+		Id:   3,
+		Name: "NotValid",
+		Url:  ":not a url",
+	}
 
 	tests := []struct {
-		name    string
-		cache   *cache.Cache
-		request *datasource.DatasourceRequest
-		want    *ZabbixDatasource
+		name      string
+		cache     *cache.Cache
+		request   *datasource.DatasourceRequest
+		wantHash  string
+		wantError string
 	}{
 		{
 			name: "Uncached Datasource (nothing in cache)",
 			request: &datasource.DatasourceRequest{
 				Datasource: basicDatasourceInfo,
 			},
-			want: NewZabbixDatasourceWithHash(hclog.NewNullLogger(), HashDatasourceInfo(basicDatasourceInfo)),
+			wantHash: HashDatasourceInfo(basicDatasourceInfo),
 		},
 		{
 			name: "Uncached Datasource (cache miss)",
 			cache: cache.NewFrom(cache.NoExpiration, cache.NoExpiration, map[string]cache.Item{
-				basicDatasourceInfoHash: cache.Item{Object: modifiedDatasource},
+				basicDatasourceInfoHash: cache.Item{Object: altDatasource},
 			}),
 			request: &datasource.DatasourceRequest{
 				Datasource: altDatasourceInfo,
 			},
-			want: NewZabbixDatasourceWithHash(hclog.NewNullLogger(), HashDatasourceInfo(altDatasourceInfo)),
+			wantHash: HashDatasourceInfo(altDatasourceInfo),
 		},
 		{
 			name: "Cached Datasource",
 			cache: cache.NewFrom(cache.NoExpiration, cache.NoExpiration, map[string]cache.Item{
-				altDatasourceInfoHash:   cache.Item{Object: NewZabbixDatasource(hclog.NewNullLogger())},
-				basicDatasourceInfoHash: cache.Item{Object: modifiedDatasource},
+				basicDatasourceInfoHash: cache.Item{Object: basicDatasource},
+				altDatasourceInfoHash:   cache.Item{Object: altDatasource},
 			}),
 			request: &datasource.DatasourceRequest{
 				Datasource: basicDatasourceInfo,
 			},
-			want: modifiedDatasource,
+			wantHash: basicDatasourceInfoHash,
+		},
+		{
+			name: "Bad URL Error",
+			request: &datasource.DatasourceRequest{
+				Datasource: badDatasourceInfo,
+			},
+			wantError: "parse :not a url: missing protocol scheme",
 		},
 	}
 	for _, tt := range tests {
@@ -66,17 +82,23 @@ func TestZabbixBackend_getCachedDatasource(t *testing.T) {
 			if tt.cache == nil {
 				tt.cache = cache.New(cache.NoExpiration, cache.NoExpiration)
 			}
-			b := &ZabbixBackend{
+			p := &ZabbixPlugin{
 				logger: hclog.New(&hclog.LoggerOptions{
 					Name:  "TestZabbixBackend_getCachedDatasource",
 					Level: hclog.LevelFromString("DEBUG"),
 				}),
 				datasourceCache: &Cache{cache: tt.cache},
 			}
-			got := b.getCachedDatasource(tt.request)
+			got, err := p.GetDatasource(tt.request)
 
-			// Only checking the hash, being the easiest value to, and guarantee equality for
-			assert.Equal(t, tt.want.hash, got.hash)
+			if tt.wantError != "" {
+				assert.Error(t, err, tt.wantError)
+				assert.Assert(t, cmp.Nil(got))
+				return
+			}
+
+			assert.NilError(t, err)
+			assert.Equal(t, tt.wantHash, got.hash)
 
 			// Ensure the datasource is in the cache
 			cacheds, ok := tt.cache.Get(HashDatasourceInfo(tt.request.GetDatasource()))
