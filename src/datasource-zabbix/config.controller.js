@@ -1,5 +1,6 @@
 import _ from 'lodash';
-import { migrateDSConfig } from './migrations';
+import { migrateCredentials, migrateDSConfig } from './migrations';
+import * as constants from './constants';
 
 const SUPPORTED_SQL_DS = ['mysql', 'postgres', 'influxdb'];
 
@@ -9,25 +10,18 @@ const zabbixVersions = [
   { name: '4.x', value: 4 },
 ];
 
-const defaultConfig = {
-  trends: false,
-  dbConnectionEnable: false,
-  dbConnectionDatasourceId: null,
-  alerting: false,
-  addThresholds: false,
-  alertingMinSeverity: 3,
-  disableReadOnlyUsersAck: false,
-  zabbixVersion: 3,
-};
-
 export class ZabbixDSConfigController {
-
   /** @ngInject */
   constructor($scope, $injector, datasourceSrv) {
+    /**
+     * @type {import('./types').CurrentConfig}
+     */
+    this.current;
     this.datasourceSrv = datasourceSrv;
 
     this.current.jsonData = migrateDSConfig(this.current.jsonData);
-    _.defaults(this.current.jsonData, defaultConfig);
+    _.defaults(this.current.jsonData, constants.DEFAULT_CONFIG);
+    migrateCredentials(this);
 
     this.dbConnectionDatasourceId = this.current.jsonData.dbConnectionDatasourceId;
     this.dbDataSources = this.getSupportedDBDataSources();
@@ -36,6 +30,22 @@ export class ZabbixDSConfigController {
     if (!this.dbConnectionDatasourceId) {
       this.loadCurrentDBDatasource();
     }
+  }
+
+  resetUsername() {
+    this.current.secureJsonFields.username = false;
+    if (!this.current.secureJsonData) {
+      this.current.secureJsonData = {};
+    }
+    this.current.secureJsonData.username = null;
+  }
+
+  resetPassword() {
+    this.current.secureJsonFields.password = false;
+    if (!this.current.secureJsonData) {
+      this.current.secureJsonData = {};
+    }
+    this.current.secureJsonData.password = null;
   }
 
   getSupportedDBDataSources() {
